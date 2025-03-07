@@ -22,17 +22,17 @@ def copy_images(imgs_list, target_dir):
                             os.path.join(target_dir, img_path.name))
 
 # source folder
-source_dir = '/dir'
+source_dir = '/home/dtsai/Data/cgras_datasets/cgras_2024_aims_camera_trolley/Amag_Oct_2024/'
 
 # target folder
-target_dir = '/dir'
+target_dir = '/home/dtsai/Data/cgras_datasets/cgras_2024_aims_camera_trolley/for_labelling/'
 
 # target number of images
-target_images = 10
+target_images = 100
 
 # check to make sure assume target images is greater than number of images in the folder
 print(f'Gathering list of images in all sub-directories of source directory: {source_dir}')
-img_list = sorted(Path(source_dir).rglob('*_clean.jpg'))
+img_list = sorted(Path(source_dir).rglob('CGRAS_Amag_*.jpg'))
 n_img = len(img_list)
 
 if target_images > len(img_list):
