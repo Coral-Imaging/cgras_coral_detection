@@ -77,7 +77,13 @@ class ImageTiler:
 
     def cut_and_save_img(self, np_img, x_start, x_end, y_start, y_end, img_save_path):
         cut_tile = np_img[y_start:y_end, x_start:x_end, :]
-        Image.fromarray(cut_tile).save(img_save_path)
+        
+        # Ensure padding if the tile is smaller than the expected size
+        padded_tile = np.ones((self.tile_height, self.tile_width, 3), dtype=np.uint8) * 255  # White padding
+        h, w = cut_tile.shape[:2]
+        padded_tile[:h, :w, :] = cut_tile
+        
+        Image.fromarray(padded_tile).save(img_save_path)
 
     def cut_annotation(self, x_start, x_end, y_start, y_end, lines, imgw, imgh):
         writelines = []
@@ -132,25 +138,25 @@ class ImageTiler:
                         for line in tile_labels:
                             tl_file.write(' '.join(map(str, line)) + '\n')
 
-    def viz_overlap_and_labels(self, index):
+    def viz_overlap_and_labels(self, index=None):
         """
-        Visualizes a 9x9 grid of tiled images around a given index, showcasing overlaps and labels.
-
-        Args:
-            index (int): Index of the image in the output folder to center the visualization.
+        Visualizes a 3x3 grid of tiled images around a given index.
+        The chosen index is at the center, and the surrounding images are loaded if available.
         """
-        # Get list of tiled images
         image_files = sorted(glob.glob(os.path.join(self.output_path, "images", "*.jpg")))
+        
+        if index is None:
+            index = np.random.randint(0, len(image_files))
 
         if index < 0 or index >= len(image_files):
             print(f"Index {index} is out of bounds. Please select a valid image index (0 to {len(image_files)-1}).")
             return
-        
+
         # Get the center image name
         center_img_path = image_files[index]
         center_img_name = os.path.basename(center_img_path)
 
-        # Extract base name and coordinates using regex to ensure correctness
+        # Extract base name and coordinates using regex
         match = re.match(r"(.+)_([0-9]+)_([0-9]+)\.jpg", center_img_name)
         if not match:
             print(f"Filename format is not as expected: {center_img_name}. Ensure correct naming convention.")
@@ -159,19 +165,15 @@ class ImageTiler:
         base_name, center_x, center_y = match.groups()
         center_x, center_y = int(center_x), int(center_y)
 
-        # Define grid size
-        grid_size = 9
-        half_grid = grid_size // 2
-        fig, axes = plt.subplots(grid_size, grid_size, figsize=(12, 12))
-        
-        for i in range(grid_size):
-            for j in range(grid_size):
-                x_offset = (i - half_grid) * self.tile_width * (1 - self.overlap_percent)
-                y_offset = (j - half_grid) * self.tile_height * (1 - self.overlap_percent)
+        fig, axes = plt.subplots(3, 3, figsize=(9, 9))
+        step = int(self.tile_width * (1 - self.overlap_percent))
 
-                # Compute corresponding tile coordinates
-                tile_x = center_x + int(x_offset)
-                tile_y = center_y + int(y_offset)
+        for i in range(3):
+            for j in range(3):
+                x_offset = (i - 1) * step
+                y_offset = (j - 1) * step
+                tile_x = center_x + x_offset
+                tile_y = center_y + y_offset
 
                 tile_img_name = f"{base_name}_{tile_x}_{tile_y}.jpg"
                 tile_label_name = f"{base_name}_{tile_x}_{tile_y}.txt"
@@ -179,43 +181,35 @@ class ImageTiler:
                 tile_img_path = os.path.join(self.output_path, "images", tile_img_name)
                 tile_label_path = os.path.join(self.output_path, "labels", tile_label_name)
 
-                # Load image if available
                 if os.path.exists(tile_img_path):
                     img = cv.imread(tile_img_path)
                     img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
                 else:
                     img = np.ones((self.tile_height, self.tile_width, 3), dtype=np.uint8) * 255  # Blank white tile
                 
-                # Draw labels if available
                 if os.path.exists(tile_label_path):
                     with open(tile_label_path, "r") as file:
                         lines = file.readlines()
-                    
                     for line in lines:
                         parts = line.strip().split()
                         class_idx = int(parts[0])
                         points = [float(p) for p in parts[1:]]
-                        
-                        # Convert normalized points to absolute coordinates
                         abs_points = np.array([
                             (int(points[i] * self.tile_width), int(points[i + 1] * self.tile_height))
                             for i in range(0, len(points), 2)
                         ])
-                        
                         if len(abs_points) > 0:
                             cv.polylines(img, [abs_points], isClosed=True, color=self.class_colours[self.classes[class_idx]], thickness=2)
                             cv.putText(img, self.classes[class_idx], (abs_points[0][0], abs_points[0][1]), 
-                                    cv.FONT_HERSHEY_SIMPLEX, 0.5, self.class_colours[self.classes[class_idx]], 2)
+                                       cv.FONT_HERSHEY_SIMPLEX, 0.5, self.class_colours[self.classes[class_idx]], 2)
 
-                # Display on the grid
                 axes[i, j].imshow(img)
                 axes[i, j].axis("off")
 
-        plt.suptitle(f"Visualization of Overlapping Tiles for Image {center_img_name}", fontsize=14)
+        plt.suptitle(f"3x3 Visualization for Image {center_img_name}", fontsize=14)
         plt.show()
 
-
-
+# Example usage
 if __name__ == '__main__':
     data_path = "/media/agoni/RRAP03/exported_data"
     output_path = "/media/agoni/RRAP03/tiled_images_output"
@@ -224,10 +218,10 @@ if __name__ == '__main__':
         tile_size=(640, 640),
         overlap_percent=50,          # 50% overlap
         data_path="/media/agoni/RRAP03/exported_2024_cgras_amag_T01_first10_100quality",
-        output_path="/media/agoni/RRAP03/tiled_dataset_containment",
+        output_path="/media/agoni/RRAP03/tiled_dataset_contained",
         max_files=16382,
-        enforce_containment=False    # Turn off strict annotation containment
+        enforce_containment=True    # Turn off strict annotation containment
     )
 
-    # tiler.tile_images()
-    tiler.viz_overlap_and_labels(0) 
+    tiler.tile_images()
+    tiler.viz_overlap_and_labels(5) 
