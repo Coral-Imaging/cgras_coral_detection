@@ -13,22 +13,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from PIL import Image
-from shapely.geometry import Polygon, box, LineString
+from shapely.geometry import (
+    Polygon, MultiPolygon, GeometryCollection,
+    LineString, Point, box
+)
 
 
 class ImageTiler:
-    def __init__(self, tile_size=(640, 640), overlap_percent=50, data_path="", output_path="", max_files=16382, enforce_containment=False):
+    def __init__(self, tile_size=(640, 640), overlap_percent=50, data_path="", output_path="", max_files=16382, wanted_classes=None):
         self.tile_width, self.tile_height = tile_size
         self.overlap_percent = overlap_percent / 100
         self.data_path = data_path
         self.output_path = output_path
         self.max_files = max_files
-        self.enforce_containment = enforce_containment
 
         self.classes = self.load_classes()
         self.class_colours = self.default_colours()
 
-        # Ensure output directories exist
+        self.wanted_classes = set(wanted_classes) if wanted_classes is not None else set(self.classes.keys())
+
         os.makedirs(self.output_path, exist_ok=True)
         os.makedirs(os.path.join(self.output_path, "images"), exist_ok=True)
         os.makedirs(os.path.join(self.output_path, "labels"), exist_ok=True)
@@ -47,15 +50,77 @@ class ImageTiler:
         ]
         return {name: colours[i % len(colours)] for i, name in self.classes.items()}
 
-    def is_mostly_contained(self, polygon, x_start, x_end, y_start, y_end):
-        polygon_box = box(*polygon.bounds)
-        tile_box = box(x_start, y_start, x_end, y_end)
-        intersection = polygon.intersection(tile_box)
-        return intersection.area > (self.overlap_percent * polygon.area)
-
     def truncate_polygon(self, polygon, x_start, x_end, y_start, y_end):
+        """
+        Intersect the given polygon with the tile bounding box, but
+        *always* return a Polygon or MultiPolygon if there's any geometry.
+        Line or point intersections are auto-converted to a bounding rectangle
+        so the downstream code sees them as polygons too.
+
+        Returns None only if there's truly no intersection.
+        """
+
         tile_box = box(x_start, y_start, x_end, y_end)
-        return polygon.intersection(tile_box)
+        clipped = polygon.intersection(tile_box)
+        if clipped.is_empty:
+            return None  # No intersection at all
+
+        # 1) If it's already a single Polygon, great—just return it
+        if isinstance(clipped, Polygon):
+            return clipped
+
+        # 2) If it's MultiPolygon or a GeometryCollection, we need to gather sub‐polygons
+        if isinstance(clipped, (MultiPolygon, GeometryCollection)):
+            polygons = []
+            for geom in clipped.geoms:
+                if isinstance(geom, Polygon):
+                    polygons.append(geom)
+                elif isinstance(geom, (LineString, Point)):
+                    # Convert line/point to bounding‐box polygon
+                    env = geom.envelope  # This yields a Polygon or possibly a LineString if min==max
+                    # If envelope is still not a Polygon, buffer slightly or skip
+                    if isinstance(env, Polygon) and not env.is_empty:
+                        polygons.append(env)
+                    else:
+                        # Optional: buffer it by a tiny epsilon to produce a small polygon
+                        buffered = geom.buffer(1e-9)
+                        if not buffered.is_empty:
+                            # buffered will often be a polygon
+                            polygons.append(buffered)
+                elif isinstance(geom, (MultiPolygon, GeometryCollection)):
+                    # Recursively handle nested geometry
+                    for subgeom in geom.geoms:
+                        if isinstance(subgeom, Polygon):
+                            polygons.append(subgeom)
+                        elif isinstance(subgeom, (LineString, Point)):
+                            env = subgeom.envelope
+                            if isinstance(env, Polygon) and not env.is_empty:
+                                polygons.append(env)
+                            else:
+                                buffered = subgeom.buffer(1e-9)
+                                if not buffered.is_empty:
+                                    polygons.append(buffered)
+
+            if not polygons:
+                return None
+            if len(polygons) == 1:
+                return polygons[0]  # Just one sub-polygon
+            else:
+                return MultiPolygon(polygons)
+
+        # 3) If it’s a bare LineString or Point (not inside a collection)
+        if isinstance(clipped, (LineString, Point)):
+            env = clipped.envelope
+            if isinstance(env, Polygon) and not env.is_empty:
+                return env
+            else:
+                # Buffer as fallback
+                buffered = clipped.buffer(1e-9)
+                return None if buffered.is_empty else buffered
+
+        # 4) Fallback: return whatever clipped is, though it should be
+        #    covered by the above if-clauses
+        return clipped
 
     def create_polygon_unnormalised(self, parts, img_width, img_height):
         xy_coords = [round(float(p) * img_width) if i % 2 else round(float(p) * img_height) for i, p in enumerate(parts[1:], start=1)]
@@ -63,13 +128,27 @@ class ImageTiler:
         return Polygon(polygon_coords)
 
     def normalise_polygon(self, truncated_polygon, class_number, x_start, y_start, width, height):
-        if isinstance(truncated_polygon, Polygon):
-            x_coords, y_coords = truncated_polygon.exterior.coords.xy
-        elif isinstance(truncated_polygon, LineString):
-            x_coords, y_coords = truncated_polygon.coords.xy
-        else:
-            return []
+        """ Normalize polygon coordinates relative to the tile. """
         
+        if truncated_polygon is None or truncated_polygon.is_empty:
+            return []
+
+        xy_list = []
+
+        if isinstance(truncated_polygon, MultiPolygon):
+            for poly in truncated_polygon.geoms:
+                if not poly.is_empty and isinstance(poly, Polygon):
+                    xy_list.append(self._normalize_single_polygon(poly, class_number, x_start, y_start, width, height))
+            return xy_list
+
+        elif isinstance(truncated_polygon, Polygon):
+            return [self._normalize_single_polygon(truncated_polygon, class_number, x_start, y_start, width, height)]
+
+        return []
+
+    def _normalize_single_polygon(self, polygon, class_number, x_start, y_start, width, height):
+        """ Helper function to normalize a single polygon. """
+        x_coords, y_coords = polygon.exterior.coords.xy
         xy = [class_number]
         for c, d in zip(x_coords, y_coords):
             xy.extend([(c - x_start) / width, (d - y_start) / height])
@@ -78,8 +157,7 @@ class ImageTiler:
     def cut_and_save_img(self, np_img, x_start, x_end, y_start, y_end, img_save_path):
         cut_tile = np_img[y_start:y_end, x_start:x_end, :]
         
-        # Ensure padding if the tile is smaller than the expected size
-        padded_tile = np.ones((self.tile_height, self.tile_width, 3), dtype=np.uint8) * 255  # White padding
+        padded_tile = np.ones((self.tile_height, self.tile_width, 3), dtype=np.uint8) * 255
         h, w = cut_tile.shape[:2]
         padded_tile[:h, :w, :] = cut_tile
         
@@ -90,20 +168,27 @@ class ImageTiler:
         for line in lines:
             parts = line.split()
             class_number = int(parts[0])
+
+            if class_number not in self.wanted_classes:
+                continue
+
             polygon = self.create_polygon_unnormalised(parts, imgw, imgh)
 
             if not polygon.is_valid or polygon.is_empty:
                 continue
 
-            if self.enforce_containment and not self.is_mostly_contained(polygon, x_start, x_end, y_start, y_end):
-                continue
-
             truncated_polygon = self.truncate_polygon(polygon, x_start, x_end, y_start, y_end)
-            if truncated_polygon.is_empty:
+
+            if truncated_polygon is None or truncated_polygon.is_empty:
                 continue
 
             xyn = self.normalise_polygon(truncated_polygon, class_number, x_start, y_start, self.tile_width, self.tile_height)
-            writelines.append(xyn)
+
+            if isinstance(xyn[0], list):  # MultiPolygon case
+                writelines.extend(xyn)  # Add each polygon separately
+            else:
+                writelines.append(xyn)  # Add normally
+                
         return writelines
 
     def tile_images(self):
@@ -152,11 +237,9 @@ class ImageTiler:
             print(f"Index {index} is out of bounds. Please select a valid image index (0 to {len(image_files)-1}).")
             return
 
-        # Get the center image name
         center_img_path = image_files[index]
         center_img_name = os.path.basename(center_img_path)
 
-        # Extract base name and coordinates using regex
         match = re.match(r"(.+)_([0-9]+)_([0-9]+)\.jpg", center_img_name)
         if not match:
             print(f"Filename format is not as expected: {center_img_name}. Ensure correct naming convention.")
@@ -211,16 +294,14 @@ class ImageTiler:
 
 # Example usage
 if __name__ == '__main__':
-    data_path = "/media/agoni/RRAP03/exported_data"
-    output_path = "/media/agoni/RRAP03/tiled_images_output"
 
     tiler = ImageTiler(
         tile_size=(640, 640),
-        overlap_percent=50,          # 50% overlap
-        data_path="/media/agoni/RRAP03/exported_2024_cgras_amag_T01_first10_100quality",
-        output_path="/media/agoni/RRAP03/tiled_dataset_contained",
+        overlap_percent=50,
+        data_path="/media/agoni/RRAP03/exported_labelled_from_cvat/exported_2024_cgras_amag_T01_first10_100quality",
+        output_path="/media/agoni/RRAP03/outputs/image_tiler",
         max_files=16382,
-        enforce_containment=True    # Turn off strict annotation containment
+        wanted_classes=None        # Include only classes 0 and 1 would be [0, 1]. Include all classes None
     )
 
     tiler.tile_images()

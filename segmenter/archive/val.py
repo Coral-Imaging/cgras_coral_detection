@@ -3,13 +3,14 @@
 """val_segmenter.py
 validate a model against a dataset. Gets TP FP FN TN, precision and recall scores.
 """
+
 #TODO: no of images in datset, info on what dataset is.
 from ultralytics import YOLO
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-weights_file = '/media/wardlewo/cslics_ssd/SCU_Pdae_Data/best_model+results/weights/best.pt' #model
+weights_file = 'cgras_segmentation/train3/weights/best.pt'
 conf_thresh = 0.25
 iou_thresh = 0.6
 
@@ -18,7 +19,7 @@ model = YOLO(weights_file)
 
 # Validate the model
 #if not arguments, will use the defult arguments and validate on the Val files of the model trained dataset.
-metrics_d = model.val(conf=conf_thresh, iou=iou_thresh, project = "/home/wardlewo/Reggie/ultralytics_output/", data='/media/wardlewo/cslics_ssd/SCU_Pdae_Data/reduced_negs_dataset/cgras_Pdae_20241126.yaml', plots=True) #data='/media/wardlewo/cslics_ssd/SCU_Pdae_Data/split and tilling/cgras_20230421.yaml',
+metrics_d = model.val(conf=conf_thresh, iou=iou_thresh, project = "cgras_segmentation", data='/media/agoni/RRAP03/outputs/cgras_data.yaml', plots=True) #data='/media/wardlewo/cslics_ssd/SCU_Pdae_Data/split and tilling/cgras_20230421.yaml',
 
 tp_d, fp_d = metrics_d.confusion_matrix.tp_fp() # returns 2 arrays, 1xN where N is the number of classes.
 conf_mat_d = metrics_d.confusion_matrix.matrix #has the confusion matrix as NXN array
@@ -99,11 +100,11 @@ def plot_results(data, conf_thresh, iou_thresh):
     plt.title(f"Simplified confusion matrix with confidence of {conf_thresh:.2f} and IOU of {iou_thresh:.2f}")
     plt.show()
 
-TPmean, FNmean, FPmean, TNmean = get_TP_FP_FN_TN(conf_mat_d, class_ignore=[0,1,7])
+TPmean, FNmean, FPmean, TNmean = get_TP_FP_FN_TN(conf_mat_d, class_ignore=None)
 data = np.array([[TPmean, TNmean], [FPmean, FNmean]])
 plot_results(data, conf_thresh, iou_thresh)
 
-precision, recall, F1 = p_r_f1(conf_mat_d, class_ignore=[2, 3, 4, 5, 6, 7, 8, 9, 10])
+precision, recall, F1 = p_r_f1(conf_mat_d, class_ignore=None)
 
 print("---------------Results---------------------")
 
