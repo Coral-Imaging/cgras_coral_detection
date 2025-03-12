@@ -184,9 +184,9 @@ class ImageTiler:
 
             xyn = self.normalise_polygon(truncated_polygon, class_number, x_start, y_start, self.tile_width, self.tile_height)
 
-            if isinstance(xyn[0], list):  # MultiPolygon case
+            if xyn and isinstance(xyn[0], list):  # MultiPolygon case
                 writelines.extend(xyn)  # Add each polygon separately
-            else:
+            elif xyn:  # Ensure xyn is not empty before appending
                 writelines.append(xyn)  # Add normally
                 
         return writelines
@@ -298,8 +298,8 @@ if __name__ == '__main__':
     tiler = ImageTiler(
         tile_size=(640, 640),
         overlap_percent=50,
-        data_path="/media/agoni/RRAP03/exported_labelled_from_cvat/exported_2024_cgras_amag_T01_first10_100quality",
-        output_path="/media/agoni/RRAP03/outputs/image_tiler",
+        data_path="/home/java/data/exported_from_cvat/export_cgras_2024_amag_T01_first10_100quality",
+        output_path="/home/java/data/outputs/image_tiler",
         max_files=16382,
         wanted_classes=None        # Include only classes 0 and 1 would be [0, 1]. Include all classes None
     )

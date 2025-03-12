@@ -13,8 +13,8 @@ import torch
 
 # Training parameters
 # model_path = "yolov8n-seg.pt"
-model_path = "/media/agoni/RRAP03/best.pt"
-yaml_data_path = "/media/agoni/RRAP03/outputs/training_not_contained//cgras_data.yaml"
+model_path = "/home/java/data/best.pt"
+yaml_data_path = "/home/java/data/outputs/cgras_data.yaml"
 pretrained = True
 epochs = 16
 batch_size = 16
@@ -31,6 +31,7 @@ model.info()
 
 model.train(
     data=yaml_data_path,
+    task="segment",
     device=device,
     epochs=epochs,
     batch=batch_size,

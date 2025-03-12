@@ -19,8 +19,8 @@ from image_processing.file_splitter import DatasetSplitter
 
 
 # Directories
-base_data_dir = "/media/agoni/RRAP03/exported_labelled_from_cvat"  # Folder containing one or multiple datasets
-outputs_dir = "/media/agoni/RRAP03/outputs/training_not_contained/"
+base_data_dir = "/home/java/data/exported_from_cvat"  # Folder containing one or multiple datasets
+outputs_dir = "/home/java/data/outputs/train_pipeline"
 tiled_output_dir = os.path.join(outputs_dir, "tiled_dataset")
 split_output_dir = os.path.join(outputs_dir, "split_dataset")
 yaml_output_path = os.path.join(outputs_dir, "cgras_data.yaml")
@@ -28,8 +28,7 @@ yaml_output_path = os.path.join(outputs_dir, "cgras_data.yaml")
 # Tiling parameters
 tile_size = (640, 640)
 overlap_percent = 50
-classes = None # "None" for all classes. Can select classes => [0, 1, 2, 3]
-containment = True
+classes = None # None for all classes. Can select classes => [0, 1, 2, 3]
 
 # Splitting ratios
 train_ratio = 0.7
@@ -38,7 +37,7 @@ test_ratio = 0.15
 
 # Training parameters
 # model_path = "yolov8n-seg.pt"
-model_path = "/media/agoni/RRAP03/best.pt"
+model_path = "/home/java/data/best.pt"
 pretrained = True
 epochs = 16
 batch_size = 16
@@ -63,7 +62,6 @@ for dataset_path in dataset_folders:
         data_path=dataset_path,
         output_path=tiled_dataset_path,
         max_files=16382,
-        enforce_containment=containment,
         wanted_classes=classes
     )
     tiler.tile_images()
@@ -115,6 +113,7 @@ model.info()
 
 model.train(
     data=yaml_output_path,
+    task="segment",
     device=device,
     epochs=epochs,
     batch=batch_size,
