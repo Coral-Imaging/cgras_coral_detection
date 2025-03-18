@@ -183,7 +183,7 @@ def main():
     predicted_list = []
 
     # Set maximum number of images to process for testing
-    max_images = 4000  # Change this value as needed for testing
+    max_images = 6000  # Change this value as needed for testing
 
     # Run model on test set and collect predictions
     for img_path in img_list[:max_images]:

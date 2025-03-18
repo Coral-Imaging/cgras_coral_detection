@@ -5,6 +5,6 @@
 #PBS -l ncpus=12
 #PBS -l mem=128gb
 #PBS -l ngpus=1
-#PBS -l gputype=T4
+#PBS -l gputype=A100
 #PBS -m abe
 #PBS -I
