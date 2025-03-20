@@ -7,6 +7,7 @@
 """
 import os
 import torch
+
 from ultralytics import YOLO
 
 SSD_PATH = "/media/java/RRAP03"
@@ -14,6 +15,15 @@ SSD_PATH = "/media/java/RRAP03"
 # Training parameters
 MODEL_NAME = "best_2024.pt"
 # MODEL_NAME = "yolov8n-seg.pt"
+
+PROJECT = "cgras_segmentation"
+NAME = "train_polyp"
+CLASSES = [0,1] # Polyp
+# NAME = "train_coral"
+# CLASSES = [2,3] # Coral
+# NAME = "train_coral_polyp"
+# CLASSES = [0,1,2,3] # Coral and Polyp
+
 PRETRAINED = True
 EPOCHS = 16
 BATCH_SIZE = 16
@@ -39,7 +49,9 @@ model.train(
     device=device,
     epochs=EPOCHS,
     batch=BATCH_SIZE,
-    project="cgras_segmentation",
+    project=PROJECT,
+    name=NAME,
+    classes=CLASSES,
     workers=WORKERS,
     patience=PATIENCE,
     pretrained=PRETRAINED,
@@ -50,6 +62,5 @@ model.train(
     flipud=0.5,
     fliplr=0.5
 )
-# i think mosiac is on by default
 
 print("\n Training complete!")

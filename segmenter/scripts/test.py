@@ -1,45 +1,40 @@
-#! /usr/bin/env python3
-
-""" predict_segmenter.py
-run segmentation model on folder of images
+#!/usr/bin/env python3
+"""
+Script to run the YOLOv8 segmentation tester on a model and dataset.
 """
 
-from ultralytics import YOLO
 import os
-import glob
-import cv2 as cv
-import matplotlib.pyplot as plt
-#Probably legacy code
-# load model
-model_path = '/home/dorian/Code/cgras_ws/cgras_settler_counter/segmenter/weights/20230606_overfit.pt'
-# load custom model (YOLOv8)
-model = YOLO(model_path)
+import sys
 
-# output directory (for plots/detections)
-out_dir = '/home/dorian/Data/cgras_datasets/cgras_dataset_20230421/predict'
-os.makedirs(out_dir, exist_ok=True)
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.tester import SegmentationTester
 
-# image directory
-img_dir = '/home/dorian/Data/cgras_datasets/cgras_dataset_20230421/train/images'
-img_list = sorted(glob.glob(os.path.join(img_dir, '*.jpg')))
+MODEL_PATH = "/home/java/repos/cgras_coral_detection/segmenter/cgras_segmentation/train7/weights/best.pt"
+YAML_PATH = "/media/java/RRAP03/outputs/train/cgras_data.yaml"
+OUTPUT_PATH = "/media/java/RRAP03/outputs/test"
+CONF_THRESHOLD = 0.5
 
-
-
-for i, img_name in enumerate(img_list):
-    print(f'{i}/{len(img_list)}: {os.path.basename(img_name)}')
-    # model inference
-    results = model(img_name, 
-                    save=True, 
-                    save_txt=True, 
-                    save_conf=True, 
-                    boxes=True,
-                    conf=0.3, # intentionally very low for debugging purposes
-                    agnostic_nms=True)
+def main(model, yaml, output, conf):
+    """Test a YOLOv8 segmentation model and visualize results."""
+    print(f"Initializing segmentation tester with:")
+    print(f"  Model: {model}")
+    print(f"  YAML config: {yaml}")
+    print(f"  Output path: {output}")
+    print(f"  Confidence threshold: {conf}")
     
-    res_plotted = results[0].plot()
-    res_rgb = cv.cvtColor(res_plotted, cv.COLOR_BGR2RGB)
-    # save image
-    img_save_name = os.path.basename(img_name).rsplit('.')[0] + '_box.jpg'
-    plt.imsave(os.path.join(out_dir, img_save_name), res_rgb)
-    # plt.show()
+    # Initialize and run the segmentation tester
+    tester = SegmentationTester(
+        model_path=model,
+        yaml_path=yaml,
+        output_path=output,
+        conf_threshold=conf
+    )
     
+    # Run predictions on all test images
+    tester.run_predictions()
+    
+    # Generate summary of the test results
+    tester.generate_summary()
+
+if __name__ == "__main__":
+    main(MODEL_PATH, YAML_PATH, OUTPUT_PATH, CONF_THRESHOLD)
