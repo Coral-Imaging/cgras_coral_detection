@@ -8,7 +8,6 @@ dependencies:
   - python=3.9
   - numpy
   - seaborn
-
   - pip
   - pandas
   - pillow
@@ -25,4 +24,4 @@ dependencies:
   - opencv>=4.6
   - ultralytics
   - sahi
-  - supervison
+  # - supervison
