@@ -138,4 +138,5 @@ home/java/Java/data/cgras_20230421
 runs/*
 
 # model training outputs
-segmenter/cgras_segmentation
+cgras_segmentation
+sahi_project
