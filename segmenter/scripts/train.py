@@ -10,29 +10,26 @@ import torch
 
 from ultralytics import YOLO
 
-SSD_PATH = "/media/java/RRAP03"
+DATA_PATH = "/mnt/hpccs01/home/gonia/data"
+# DATA_PATH = "/media/java/RRAP03"
 
 # Training parameters
 MODEL_NAME = "best_2024.pt"
-# MODEL_NAME = "yolov8n-seg.pt"
 
 PROJECT = "cgras_segmentation"
-NAME = "train_polyp"
-CLASSES = [0,1] # Polyp
-# NAME = "train_coral"
-# CLASSES = [2,3] # Coral
-# NAME = "train_coral_polyp"
-# CLASSES = [0,1,2,3] # Coral and Polyp
+NAME = "train_coral_polyp"
+CLASSES = [0,1,2,3] # Coral and Polyp
 
 PRETRAINED = True
-EPOCHS = 16
-BATCH_SIZE = 16
-WORKERS = 4
-SAVE_PERIOD = 2
-PATIENCE = 4
+EPOCHS = 1000
+BATCH_SIZE = 0.8
+WORKERS = 32
+SAVE_PERIOD = 10
+PATIENCE = 25
+MASK_OVERLAP = False
 
-model_path = os.path.join(SSD_PATH, "models", MODEL_NAME)
-yaml_data_path = os.path.join(SSD_PATH, "outputs/train/cgras_data.yaml")
+model_path = os.path.join(DATA_PATH, "models", MODEL_NAME)
+yaml_data_path = os.path.join(DATA_PATH, "train/cgras_data.yaml")
 
 # Train the model
 print("\n Starting YOLOv8 Training...")
@@ -57,6 +54,7 @@ model.train(
     pretrained=PRETRAINED,
     save_period=SAVE_PERIOD,
     deterministic=False,
+    overlap_mask=MASK_OVERLAP,
     imgsz=640,
     scale=0.2,
     flipud=0.5,
