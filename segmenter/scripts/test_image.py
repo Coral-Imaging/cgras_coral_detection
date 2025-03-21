@@ -18,9 +18,14 @@ from pathlib import Path
 from ultralytics import YOLO
 
 # Hardcoded parameters - change these as needed
+<<<<<<< HEAD
+MODEL_PATH = "/home/java/hpc-home/cgras_segmentation/train_coral_polyp2/weights/best.pt"
+
+=======
 # MODEL_PATH = "/home/java/repos/cgras_coral_detection/segmenter/cgras_segmentation/train7/weights/best.pt"
 # MODEL_PATH = "/home/java/repos/cgras_coral_detection/segmenter/cgras_segmentation/train_polyp/weights/best.pt"
 MODEL_PATH = "/home/java/hpc-home/cgras_segmentation/train_coral_polyp2/weights/best.pt"
+>>>>>>> 61bbdbb9bd0ad5c0e02a838a1500f36abc451cde
 YAML_PATH = "/media/java/RRAP03/outputs/train/cgras_data.yaml"
 # IMAGE_PATH = "/media/java/RRAP03/outputs/train/split_dataset/export_cgras_2024_amag_T01_first10_100quality/valid/images/CGRAS_Amag_MIS5a_20241211_w6_T01_07_320_4160.jpg"
 IMAGE_PATH = "/media/java/RRAP03/outputs/train/split_dataset/export_cgras_2024_amag_T01_first10_100quality/valid/images/CGRAS_Amag_MIS5a_20241105_w1_T01_13_7040_1600.jpg"
