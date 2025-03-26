@@ -7,12 +7,15 @@ Uses the cgras_data.yaml file to locate all train, val, and test images.
 """
 
 import os
-import re
 import yaml
 import glob
 import argparse
+import multiprocessing
+import concurrent.futures
 import numpy as np
+
 from PIL import Image
+from tqdm import tqdm
 from pathlib import Path
 from shapely.geometry import (
     Polygon, MultiPolygon, GeometryCollection,
@@ -27,7 +30,7 @@ class DatasetTiler:
     Creates a new tiled_dataset directory with the same train/val/test structure.
     """
     
-    def __init__(self, yaml_path, output_base_path=None, tile_size=(640, 640), overlap_percent=50):
+    def __init__(self, yaml_path, output_base_path=None, tile_size=(640, 640), overlap_percent=50, max_workers=None):
         """
         Initialize the DatasetTiler.
         
@@ -36,9 +39,17 @@ class DatasetTiler:
             output_base_path (str, optional): Base path for the output tiled dataset. If None, uses the parent directory of yaml_path.
             tile_size (tuple): Size of the tiles (width, height).
             overlap_percent (float): Percentage of overlap between adjacent tiles.
+            max_workers (int): Maximum number of worker threads to use.
         """
         self.yaml_path = Path(yaml_path)
         self.base_path = self.yaml_path.parent
+        if max_workers is None:
+            # Use CPU count or a sensible default, but leave some resources for the system
+            cpu_count = multiprocessing.cpu_count()
+            self.max_workers = max(1, cpu_count - 1)  # Leave at least one CPU for system processes
+            print(f"Auto-detected {cpu_count} CPU cores, using {self.max_workers} worker threads")
+        else:
+            self.max_workers = max_workers
         
         # If output_base_path is not provided, use the parent directory of yaml_path
         if output_base_path is None:
@@ -272,13 +283,83 @@ class DatasetTiler:
                 
         return tile_labels
     
-    def _process_image_set(self, image_dirs, split_name):
+    def _process_single_image(self, img_path, label_dir, split_name, images_dir, labels_dir):
         """
-        Process a set of image directories for a specific split (train/val/test).
+        Process a single image into tiles.
+        
+        Args:
+            img_path (Path): Path to the image file.
+            label_dir (Path): Directory containing the label files.
+            split_name (str): The split name (train, val, test).
+            images_dir (Path): Directory to save tiled images.
+            labels_dir (Path): Directory to save tiled labels.
+            
+        Returns:
+            list: List of relative paths to created tile images.
+        """
+        image_paths = []
+        img_path = Path(img_path)
+        img_name = img_path.stem
+        img_ext = img_path.suffix
+        
+        # Get corresponding label path
+        label_path = Path(label_dir) / f"{img_name}.txt"
+        
+        # Get image dimensions
+        img = Image.open(img_path)
+        img_width, img_height = img.size
+        
+        # Calculate step sizes based on overlap
+        step_x = int(self.tile_width * (1 - self.overlap_percent))
+        step_y = int(self.tile_height * (1 - self.overlap_percent))
+        
+        # Tile the image
+        for x in range(0, img_width - 1, step_x):
+            for y in range(0, img_height - 1, step_y):
+                # Adjust x_end and y_end to not exceed image dimensions
+                x_end = min(x + self.tile_width, img_width)
+                y_end = min(y + self.tile_height, img_height)
+                
+                # Skip small tiles (less than 50% of tile size)
+                if (x_end - x) < self.tile_width // 2 or (y_end - y) < self.tile_height // 2:
+                    continue
+                    
+                # Create tile filenames
+                tile_img_name = f"{img_name}_{x}_{y}{img_ext}"
+                tile_label_name = f"{img_name}_{x}_{y}.txt"
+                
+                # Create tile paths
+                tile_img_path = images_dir / tile_img_name
+                tile_label_path = labels_dir / tile_label_name
+                
+                # Cut and save the image tile
+                self.cut_and_save_img(img_path, x, x_end, y, y_end, tile_img_path)
+                
+                # Cut and save the label tile
+                tile_labels = self.cut_annotation(label_path, x, x_end, y, y_end, img_width, img_height)
+                
+                if tile_labels:
+                    with open(tile_label_path, 'w') as f:
+                        for label in tile_labels:
+                            f.write(' '.join(map(str, label)) + '\n')
+                else:
+                    # If no labels, create an empty label file
+                    open(tile_label_path, 'w').close()
+                    
+                # Add to processed images
+                rel_path = f"{split_name}/images/{tile_img_name}"
+                image_paths.append(rel_path)
+        
+        return image_paths
+
+    def _process_image_set(self, image_dirs, split_name, max_workers=8):
+        """
+        Process a set of image directories for a specific split (train/val/test) using thread pool.
         
         Args:
             image_dirs (list): List of image directory paths.
             split_name (str): Name of the split (train, val, or test).
+            max_workers (int): Maximum number of worker threads to use.
             
         Returns:
             list: List of relative paths to created tile images.
@@ -291,7 +372,9 @@ class DatasetTiler:
         os.makedirs(images_dir, exist_ok=True)
         os.makedirs(labels_dir, exist_ok=True)
         
-        image_paths = []
+        # Collect all image files to process
+        all_img_files = []
+        all_label_dirs = []
         
         # Process each image directory
         for img_dir in image_dirs:
@@ -307,62 +390,44 @@ class DatasetTiler:
             if not img_files:
                 print(f"No images found in {abs_img_dir}")
                 continue
-                
-            # Process each image
-            for img_path in img_files:
-                img_path = Path(img_path)
-                img_name = img_path.stem
-                img_ext = img_path.suffix
-                
-                # Get corresponding label path
-                label_dir = str(abs_img_dir).replace("/images/", "/labels/")
-                label_path = Path(label_dir) / f"{img_name}.txt"
-                
-                # Get image dimensions
-                img = Image.open(img_path)
-                img_width, img_height = img.size
-                
-                # Calculate step sizes based on overlap
-                step_x = int(self.tile_width * (1 - self.overlap_percent))
-                step_y = int(self.tile_height * (1 - self.overlap_percent))
-                
-                # Tile the image
-                for x in range(0, img_width - 1, step_x):
-                    for y in range(0, img_height - 1, step_y):
-                        # Adjust x_end and y_end to not exceed image dimensions
-                        x_end = min(x + self.tile_width, img_width)
-                        y_end = min(y + self.tile_height, img_height)
-                        
-                        # Skip small tiles (less than 50% of tile size)
-                        if (x_end - x) < self.tile_width // 2 or (y_end - y) < self.tile_height // 2:
-                            continue
-                            
-                        # Create tile filenames
-                        tile_img_name = f"{img_name}_{x}_{y}{img_ext}"
-                        tile_label_name = f"{img_name}_{x}_{y}.txt"
-                        
-                        # Create tile paths
-                        tile_img_path = images_dir / tile_img_name
-                        tile_label_path = labels_dir / tile_label_name
-                        
-                        # Cut and save the image tile
-                        self.cut_and_save_img(img_path, x, x_end, y, y_end, tile_img_path)
-                        
-                        # Cut and save the label tile
-                        tile_labels = self.cut_annotation(label_path, x, x_end, y, y_end, img_width, img_height)
-                        
-                        if tile_labels:
-                            with open(tile_label_path, 'w') as f:
-                                for label in tile_labels:
-                                    f.write(' '.join(map(str, label)) + '\n')
-                        else:
-                            # If no labels, create an empty label file
-                            open(tile_label_path, 'w').close()
-                            
-                        # Add to processed images
-                        rel_path = f"{split_name}/images/{tile_img_name}"
-                        image_paths.append(rel_path)
-                        
+            
+            # Get corresponding label directory
+            label_dir = str(abs_img_dir).replace("/images/", "/labels/")
+            
+            # Add to the list of files to process
+            all_img_files.extend(img_files)
+            all_label_dirs.extend([label_dir] * len(img_files))
+        
+        if not all_img_files:
+            print(f"No images found for {split_name}")
+            return []
+        
+        # Process images in parallel
+        image_paths = []
+        print(f"Processing {len(all_img_files)} images for {split_name} using ThreadPoolExecutor")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Create a list of futures
+            futures = [
+                executor.submit(
+                    self._process_single_image, 
+                    img_path, 
+                    label_dir, 
+                    split_name, 
+                    images_dir, 
+                    labels_dir
+                )
+                for img_path, label_dir in zip(all_img_files, all_label_dirs)
+            ]
+            
+            # Process as they complete with a progress bar
+            for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures), desc=f"{split_name} Processing"):
+                try:
+                    result = future.result()
+                    image_paths.extend(result)
+                except Exception as e:
+                    print(f"Error processing image: {e}")
+        
         return image_paths
     
     def process(self):
@@ -382,15 +447,15 @@ class DatasetTiler:
         # Process each split
         if 'train' in self.config:
             print("Processing training images...")
-            train_paths = self._process_image_set(self.config['train'], 'train')
+            train_paths = self._process_image_set(self.config['train'], 'train', self.max_workers)
             
         if 'val' in self.config:
             print("Processing validation images...")
-            val_paths = self._process_image_set(self.config['val'], 'val')
+            val_paths = self._process_image_set(self.config['val'], 'val', self.max_workers)
             
         if 'test' in self.config:
             print("Processing test images...")
-            test_paths = self._process_image_set(self.config['test'], 'test')
+            test_paths = self._process_image_set(self.config['test'], 'test', self.max_workers)
             
         # Create new YAML configuration
         new_config = {
@@ -419,6 +484,8 @@ def main():
     parser.add_argument('--output', default=None, help='Base path for output (default: same as yaml parent directory)')
     parser.add_argument('--tile-size', type=int, nargs=2, default=[640, 640], help='Tile size as width height (default: 640 640)')
     parser.add_argument('--overlap', type=float, default=50, help='Percentage of overlap between tiles (default: 50)')
+    parser.add_argument('--max-workers', type=int, default=None, 
+                        help='Maximum number of worker threads (default: auto-detect based on CPU count)')
     
     args = parser.parse_args()
     
@@ -427,7 +494,8 @@ def main():
         yaml_path=args.yaml,
         output_base_path=args.output,
         tile_size=tuple(args.tile_size),
-        overlap_percent=args.overlap
+        overlap_percent=args.overlap,
+        max_workers=args.max_workers
     )
     
     tiler.process()
