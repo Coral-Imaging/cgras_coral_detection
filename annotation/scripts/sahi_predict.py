@@ -24,8 +24,8 @@ OUTPUT_DIR = "/media/java/RRAP03/outputs/coco_annotations/"  # Replace with your
 MODEL_PATH = "/home/java/hpc-home/cgras_segmentation/train_coral_polyp3/weights/best.pt"  # Replace with your model path
 SLICE_WIDTH = 640
 SLICE_HEIGHT = 640
-OVERLAP = 0.3
-CONF_THRESH = 0.3
+OVERLAP = 0.5
+CONF_THRESH = 0.4
 DEVICE = "cuda:0"  # or 'cpu'
 
 ### VALIDATION ###

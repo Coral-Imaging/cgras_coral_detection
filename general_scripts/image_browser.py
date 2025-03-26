@@ -17,7 +17,7 @@ import numpy as np
 import time
 
 # Define base directory
-BASE_DIR = "/media/agoni/RRAP03/cgras_2024_aims_camera_trolley"
+BASE_DIR = "/media/java/RRAP03/cgras_2024_aims_camera_trolley"
 
 # Options
 SPECIES_OPTIONS = ["Amag", "Maeq", "Pdae", "Amil"]

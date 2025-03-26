@@ -1,11 +1,8 @@
 #! /usr/bin/env python3
-
 """ val_segmenter.py
-
-    Validate a YOLO model against a dataset. Computes True Positives (TP), False Positives (FP),
-    False Negatives (FN), True Negatives (TN), precision, recall, and F1 scores.
+ Validate a YOLO model against a dataset. Computes True Positives (TP), False Positives (FP),
+ False Negatives (FN), True Negatives (TN), precision, recall, and F1 scores.
 """
-import os
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -14,15 +11,13 @@ from ultralytics import YOLO
 # -----------------------------
 # CONFIGURATION: MODIFY AS NEEDED
 # -----------------------------
-SSD_PATH = "/media/java/RRAP03"
 PROJECT_DIR = "cgras_segmentation"
-TRAIN_DIR = "train7"
-CONF_THRESH = 0.25
-IOU_THRESH = 0.6
+CONF_THRESH = 0.7
+IOU_THRESH = 0.5
 IGNORE_CLASSES = None
-
-weights_file = os.path.join(PROJECT_DIR, TRAIN_DIR, "weights/best.pt")
-data_file = os.path.join(SSD_PATH, "outputs/train/cgras_data.yaml")
+weights_file = "/home/java/hpc-home/cgras_segmentation/train_coral_polyp6/weights/epoch100.pt"
+data_file = "/home/java/hpc-home/data/train100/cgras_data.yaml"
+# data_file = "/home/java/hpc-home/data/test/cgras_data.yaml"
 
 # -----------------------------
 # MODEL INITIALIZATION & VALIDATION
@@ -30,77 +25,66 @@ data_file = os.path.join(SSD_PATH, "outputs/train/cgras_data.yaml")
 model = YOLO(weights_file)
 metrics_d = model.val(conf=CONF_THRESH, iou=IOU_THRESH, project=PROJECT_DIR, data=data_file, plots=True)
 
+# Get confusion matrix
 conf_mat_d = metrics_d.confusion_matrix.matrix  # Confusion matrix
-conf_mat_normalized = conf_mat_d / (conf_mat_d.sum(0).reshape(1, -1) + 1E-9)  # Normalize
 
-# -----------------------------
-# FUNCTION DEFINITIONS
-# -----------------------------
-def compute_confusion_metrics(conf_mat, ignore_classes=None):
-    """Compute TP, FP, FN, TN, ignoring specified classes."""
-    if ignore_classes is None:
-        ignore_classes = []
-    
-    tp = conf_mat.diagonal()
-    fp = conf_mat.sum(1) - tp
-    fn = conf_mat.sum(0) - tp
-    total_samples = conf_mat.sum()
-    tn = total_samples - (fp + fn + tp)
-    
-    mask = np.ones(conf_mat.shape[0], dtype=bool)
-    mask[ignore_classes] = False
-    
-    tp_rate = np.where(tp + fn > 0, tp / (tp + fn), 0)[mask]
-    fn_rate = np.where(tp + fn > 0, fn / (tp + fn), 0)[mask]
-    fp_rate = np.where(fp + tn > 0, fp / (fp + tn), 0)[mask]
-    tn_rate = np.where(fp + tn > 0, tn / (fp + tn), 0)[mask]
-    
-    return np.mean(tp_rate), np.mean(fn_rate), np.mean(fp_rate), np.mean(tn_rate)
+# Access the segmentation mAP@50
+map50 = metrics_d.seg.map50
 
-def compute_precision_recall_f1(conf_mat, ignore_classes=None):
-    """Compute precision, recall, and F1-score, ignoring specified classes."""
-    if ignore_classes is None:
-        ignore_classes = []
-    
-    mask = np.ones(conf_mat.shape[0], dtype=bool)
-    mask[ignore_classes] = False
-    
-    tp = conf_mat.diagonal()
-    fp = conf_mat.sum(1) - tp
-    fn = conf_mat.sum(0) - tp
-    
-    precision = np.where(tp + fp > 0, tp / (tp + fp), 0)[mask]
-    recall = np.where(tp + fn > 0, tp / (tp + fn), 0)[mask]
-    f1 = np.where(precision + recall > 0, 2 * precision * recall / (precision + recall), 0)
-    
-    return np.mean(precision), np.mean(recall), np.mean(f1)
+# Access precision, recall and F1
+precision = metrics_d.seg.p  # Precision
+recall = metrics_d.seg.r     # Recall
+f1 = metrics_d.seg.f1        # F1 score
 
-def plot_confusion_matrix(data, conf_thresh, iou_thresh):
-    """Plot a simplified confusion matrix."""
-    plt.figure(figsize=(6, 4))
-    sns.heatmap(data, annot=True, fmt=".2%", cmap='Blues', xticklabels=['P (Positive)', 'N (Negative)'], yticklabels=['T (True)', 'F (False)'])
-    plt.title(f"Confusion Matrix (Conf={conf_thresh:.2f}, IOU={iou_thresh:.2f})")
-    plt.show()
+# Print the values
+print(f"Segmentation mAP@50: {map50:.4f}")
 
-# -----------------------------
-# COMPUTE & DISPLAY RESULTS
-# -----------------------------
-TPmean, FNmean, FPmean, TNmean = compute_confusion_metrics(conf_mat_d, ignore_classes=IGNORE_CLASSES)
-data_matrix = np.array([[TPmean, TNmean], [FPmean, FNmean]])
-plot_confusion_matrix(data_matrix, CONF_THRESH, IOU_THRESH)
+# Handle precision, recall, and F1 which may be arrays
+if hasattr(precision, 'shape') and precision.size > 1:
+    # If it's an array with multiple values (per class)
+    print(f"Precision (mean): {np.mean(precision):.4f}")
+    print("Precision per class:")
+    class_names = metrics_d.names if hasattr(metrics_d, 'names') else [f'Class {i}' for i in range(len(precision))]
+    for i, p in enumerate(precision):
+        print(f"  {class_names[i]}: {p:.4f}")
+else:
+    # If it's a single value
+    print(f"Precision: {float(precision):.4f}")
 
-precision, recall, f1_score = compute_precision_recall_f1(conf_mat_d, ignore_classes=IGNORE_CLASSES)
+# Do the same for recall
+if hasattr(recall, 'shape') and recall.size > 1:
+    print(f"Recall (mean): {np.mean(recall):.4f}")
+    print("Recall per class:")
+    class_names = metrics_d.names if hasattr(metrics_d, 'names') else [f'Class {i}' for i in range(len(recall))]
+    for i, r in enumerate(recall):
+        print(f"  {class_names[i]}: {r:.4f}")
+else:
+    print(f"Recall: {float(recall):.4f}")
 
-print("--------------- Results ---------------------")
-print(f"TP={TPmean:.4f}, FP={FPmean:.4f}, FN={FNmean:.4f}, TN={TNmean:.4f}")
-print(f"Precision={precision:.4f}, Recall={recall:.4f}, F1={f1_score:.4f}")
-print(f"mAP50-95={metrics_d.maps}")
+# And for F1
+if hasattr(f1, 'shape') and f1.size > 1:
+    print(f"F1 Score (mean): {np.mean(f1):.4f}")
+    print("F1 Score per class:")
+    class_names = metrics_d.names if hasattr(metrics_d, 'names') else [f'Class {i}' for i in range(len(f1))]
+    for i, f in enumerate(f1):
+        print(f"  {class_names[i]}: {f:.4f}")
+else:
+    print(f"F1 Score: {float(f1):.4f}")
 
+# Plot confusion matrix
+plt.figure(figsize=(10, 8))
+conf_mat_norm = conf_mat_d.astype('float') / (conf_mat_d.sum(axis=1)[:, np.newaxis] + 1e-6)  # normalize
 
-# Visualization for segmentation model
-print(f"MAP50-90 for all classes: {metrics_d.seg.map}")
-print(f"MAP50 for all classes: {metrics_d.seg.map50}")
-print(f"MAP50-90 per class: {metrics_d.seg.maps}")
-print(f"MAP50 per class: {metrics_d.seg.ap50}")
+# Get class names if available
+class_names = metrics_d.names if hasattr(metrics_d, 'names') else [f'Class {i}' for i in range(conf_mat_d.shape[0])]
 
-print("Done")
+# Create heatmap
+sns.heatmap(conf_mat_norm, annot=True, fmt='.2f', cmap='Blues',
+           xticklabels=class_names,
+           yticklabels=class_names)
+plt.xlabel('Predicted')
+plt.ylabel('True')
+plt.title('Normalized Confusion Matrix')
+plt.tight_layout()
+plt.savefig(f"{PROJECT_DIR}/confusion_matrix.png")
+plt.show()

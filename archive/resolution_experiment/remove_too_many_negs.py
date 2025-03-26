@@ -49,7 +49,7 @@ def process_folder(labels_folder, images_folder, destination_folder, root_folder
             print(f"Image not found for label: {label_file}")
 
 def main():
-    root_folder = "/home/java/Java/hpc-home/Data/cgras/cgras_23_n_24_combined/cgras_22_23_data_tilled"
+    root_folder = "/home/java/hpc-home/data/train100/split_dataset/exported100"
     destination_folder = "/home/java/Java/hpc-home/Data/cgras/cgras_23_n_24_combined/cgras_22_23_data_tilled_reduced_negs"
     
     valid_folders = find_valid_folders(root_folder)

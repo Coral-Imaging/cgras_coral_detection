@@ -19,15 +19,25 @@ from shapely.geometry import (
 )
 
 class ImageTiler:
-    def __init__(self, ssd_path, data_path="", output_path="image_tiler", tile_size=(640, 640), overlap_percent=50, max_files=16382, wanted_classes=None):
-        self.ssd_path = ssd_path
-        self.data_path = os.path.join(ssd_path, data_path)
-        self.output_path = os.path.join(ssd_path,"outputs", output_path)
+    def __init__(self, data_path, output_path, tile_size=(640, 640), overlap_percent=50, wanted_classes=None):
+        """
+        Initialize the ImageTiler class.
         
+        Args:
+            ssd_path: Base path for the dataset
+            data_path: Path to the data directory
+            output_path: Path to save the tiled images and labels
+            tile_size: Size of the tiles (width, height)
+            overlap_percent: Percentage of overlap between tiles
+            max_files: Maximum number of files to process
+            wanted_classes: Classes to include in the tiled dataset
+            use_direct_paths: Whether to use direct paths instead of joining with ssd_path
+        """
+        self.data_path = data_path
+        self.output_path = output_path
         self.tile_width, self.tile_height = tile_size
         self.overlap_percent = overlap_percent / 100
-        self.max_files = max_files
-
+        
         self.classes = self.load_classes()
         self.class_colours = self.default_colours()
 
@@ -38,18 +48,25 @@ class ImageTiler:
         os.makedirs(os.path.join(self.output_path, "labels"), exist_ok=True)
 
     def load_classes(self):
+        """Load class names from data.yaml file."""
         yml_path = os.path.join(self.data_path, 'data.yaml')
+        if not os.path.exists(yml_path):
+            print(f"Warning: data.yaml not found at {yml_path}.")
+            # Default classes if yaml not found
+            return {0: "alive", 1: "dead", 2: "mask_live", 3: "mask_dead"}
+            
         with open(yml_path, 'r') as f:
             data = yaml.safe_load(f)
         return data['names']
 
     def default_colours(self):
+        """Generate default colors for visualization."""
         colours = [
             (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0),
             (255, 0, 255), (0, 255, 255), (128, 0, 128), (255, 165, 0),
             (144, 65, 2), (0, 128, 0), (192, 192, 192), (0, 100, 0)
         ]
-        return {name: colours[i % len(colours)] for i, name in self.classes.items()}
+        return {i: colours[i % len(colours)] for i in self.classes.keys()}
 
     def truncate_polygon(self, polygon, x_start, x_end, y_start, y_end):
         """
@@ -60,7 +77,6 @@ class ImageTiler:
 
         Returns None only if there's truly no intersection.
         """
-
         tile_box = box(x_start, y_start, x_end, y_end)
         clipped = polygon.intersection(tile_box)
         if clipped.is_empty:
@@ -109,7 +125,7 @@ class ImageTiler:
             else:
                 return MultiPolygon(polygons)
 
-        # 3) If it’s a bare LineString or Point (not inside a collection)
+        # 3) If it's a bare LineString or Point (not inside a collection)
         if isinstance(clipped, (LineString, Point)):
             env = clipped.envelope
             if isinstance(env, Polygon) and not env.is_empty:
@@ -193,36 +209,88 @@ class ImageTiler:
         return writelines
 
     def tile_images(self):
+        """Tile images and corresponding labels."""
+        # Look for Train.txt or scan image directory
         image_list_path = os.path.join(self.data_path, 'Train.txt')
-        with open(image_list_path, 'r') as file:
-            images = file.read().splitlines()
-
-        for img_path in images[:self.max_files]:
-            img_name = os.path.basename(img_path).rsplit('.', 1)[0]
-            full_img_path = os.path.join(self.data_path, img_path)
-            full_label_path = full_img_path.replace('images', 'labels').replace('.jpg', '.txt')
-
-            np_img = np.array(Image.open(full_img_path))
+        
+        if os.path.exists(image_list_path):
+            # If Train.txt exists, use it
+            with open(image_list_path, 'r') as file:
+                images = file.read().splitlines()
+            
+            # Process each image path from Train.txt
+            for img_path in images:
+                img_name = os.path.basename(img_path).rsplit('.', 1)[0]
+                full_img_path = os.path.join(self.data_path, img_path)
+                full_label_path = full_img_path.replace('images', 'labels').replace('.jpg', '.txt')
+                
+                # Skip if image doesn't exist
+                if not os.path.exists(full_img_path):
+                    print(f"Warning: Image not found: {full_img_path}")
+                    continue
+                
+                # Skip if label doesn't exist
+                if not os.path.exists(full_label_path):
+                    print(f"Warning: Label not found: {full_label_path}")
+                    continue
+                
+                self._process_single_image(img_name, full_img_path, full_label_path)
+        else:
+            # If Train.txt doesn't exist, scan image directory
+            print(f"Train.txt not found at {image_list_path}. Scanning image directory...")
+            image_dir = os.path.join(self.data_path, 'images')
+            
+            if not os.path.exists(image_dir):
+                raise FileNotFoundError(f"Image directory not found: {image_dir}")
+            
+            # Process each image in the directory
+            image_files = sorted(glob.glob(os.path.join(image_dir, '*.jpg')))
+            
+            for img_path in image_files:
+                img_name = os.path.basename(img_path).rsplit('.', 1)[0]
+                label_path = os.path.join(self.data_path, 'labels', f"{img_name}.txt")
+                
+                # Skip if label doesn't exist
+                if not os.path.exists(label_path):
+                    print(f"Warning: Label not found: {label_path}")
+                    continue
+                
+                self._process_single_image(img_name, img_path, label_path)
+    
+    def _process_single_image(self, img_name, img_path, label_path):
+        """Process a single image and its label file."""
+        try:
+            # Load image
+            np_img = np.array(Image.open(img_path))
             img_h, img_w = np_img.shape[:2]
-
+            
+            # Calculate step size for tiling
             step_x = int(self.tile_width * (1 - self.overlap_percent))
             step_y = int(self.tile_height * (1 - self.overlap_percent))
-
+            
+            # Read label file
+            with open(label_path, 'r') as label_file:
+                lines = label_file.readlines()
+            
+            # Generate tiles
             for x in range(0, img_w - self.tile_width + 1, step_x):
                 for y in range(0, img_h - self.tile_height + 1, step_y):
                     tile_img_name = f'{img_name}_{x}_{y}.jpg'
                     tile_img_path = os.path.join(self.output_path, "images", tile_img_name)
                     tile_label_path = os.path.join(self.output_path, "labels", f'{img_name}_{x}_{y}.txt')
-
+                    
+                    # Cut and save image tile
                     self.cut_and_save_img(np_img, x, x + self.tile_width, y, y + self.tile_height, tile_img_path)
-
-                    with open(full_label_path, 'r') as label_file:
-                        lines = label_file.readlines()
-
+                    
+                    # Process annotations for this tile
                     tile_labels = self.cut_annotation(x, x + self.tile_width, y, y + self.tile_height, lines, img_w, img_h)
+                    
+                    # Save annotations
                     with open(tile_label_path, 'w') as tl_file:
                         for line in tile_labels:
                             tl_file.write(' '.join(map(str, line)) + '\n')
+        except Exception as e:
+            print(f"Error processing image {img_name}: {str(e)}")
 
     def viz_overlap_and_labels(self, index=None):
         """
@@ -232,6 +300,9 @@ class ImageTiler:
         image_files = sorted(glob.glob(os.path.join(self.output_path, "images", "*.jpg")))
         
         if index is None:
+            if not image_files:
+                print("No tiled images found. Please run tile_images() first.")
+                return
             index = np.random.randint(0, len(image_files))
 
         if index < 0 or index >= len(image_files):
@@ -283,19 +354,20 @@ class ImageTiler:
                             for i in range(0, len(points), 2)
                         ])
                         if len(abs_points) > 0:
-                            cv.polylines(img, [abs_points], isClosed=True, color=self.class_colours[self.classes[class_idx]], thickness=2)
+                            cv.polylines(img, [abs_points], isClosed=True, color=self.class_colours[class_idx], thickness=2)
                             cv.putText(img, self.classes[class_idx], (abs_points[0][0], abs_points[0][1]), 
-                                       cv.FONT_HERSHEY_SIMPLEX, 0.5, self.class_colours[self.classes[class_idx]], 2)
+                                       cv.FONT_HERSHEY_SIMPLEX, 0.5, self.class_colours[class_idx], 2)
 
                 axes[i, j].imshow(img)
                 axes[i, j].axis("off")
 
         plt.suptitle(f"3x3 Visualization for Image {center_img_name}", fontsize=14)
+        plt.tight_layout()
         plt.show()
+
 
 # Example usage
 if __name__ == '__main__':
-
     ssd_path = "/media/java/RRAP03"
 
     tiler = ImageTiler(
@@ -304,9 +376,8 @@ if __name__ == '__main__':
         output_path="image_tiler", 
         tile_size=(640, 640),
         overlap_percent=50,
-        max_files=16382,
         wanted_classes=None
     )
 
     tiler.tile_images()
-    # tiler.viz_overlap_and_labels(5) 
+    # tiler.viz_overlap_and_labels(5)
