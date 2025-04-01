@@ -5,7 +5,7 @@ import cv2
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 
-classes = ["recruit_live_white", "recruit_cluster_live_white", "recruit_symbiotic", "recruit_cluster_symbiotic", "recruit_partial",
+classes = ["Alive", "Dead", "recruit_symbiotic", "recruit_cluster_symbiotic", "recruit_partial",
            "recruit_cluster_partial", "recruit_dead", "recruit_cluster_dead", "grazer_snail", "pest_tubeworm", "unknown"] 
 
 
@@ -31,9 +31,20 @@ def process_label_file(label_file, image_dir, output_dir, ignore_classes, classe
         lines = f.readlines()
 
         for i, line in enumerate(lines):
+            # Skip empty lines
+            if not line.strip():
+                continue
+                
             # Parse label data
             parts = line.strip().split()
-            class_id = int(parts[0])
+            if not parts:  # Skip if line is empty after splitting
+                continue
+                
+            try:
+                class_id = int(parts[0])
+            except (IndexError, ValueError):
+                print(f"Invalid class ID in {label_file}, line {i+1}")
+                continue
 
             # Ignore specified classes
             if class_id in ignore_classes:
@@ -41,9 +52,21 @@ def process_label_file(label_file, image_dir, output_dir, ignore_classes, classe
 
             # Parse (x, y) coordinate pairs
             try:
-                coordinates = list(map(float, parts[1:]))
-                if len(coordinates) % 2 != 0:
-                    print(f"Invalid number of coordinates in {label_file}: {line}")
+                coordinates = []
+                # Process coordinates - look for pairs of floats after the class_id
+                for j in range(1, len(parts), 2):
+                    if j + 1 < len(parts):  # Ensure we have a pair
+                        try:
+                            x, y = float(parts[j]), float(parts[j+1])
+                            coordinates.append(x)
+                            coordinates.append(y)
+                        except ValueError:
+                            # This could be the start of a new annotation on the same line
+                            # Break and process what we have so far
+                            break
+                
+                if len(coordinates) < 6:  # Need at least 3 points for a polygon
+                    print(f"Not enough valid coordinates in {label_file}, line {i+1}")
                     continue
 
                 # Group coordinates into pairs
@@ -77,8 +100,8 @@ def process_label_file(label_file, image_dir, output_dir, ignore_classes, classe
                     "labels": [class_id],
                     "path": os.path.relpath(crop_path, output_dir)
                 }
-            except ValueError as e:
-                print(f"Error parsing label file {label_file}: {e}")
+            except Exception as e:
+                print(f"Error processing label file {label_file}, line {i+1}: {e}")
                 continue
 
 
@@ -137,17 +160,17 @@ def remove_small_images(output_dir, min_size_kb=2.5):
         for file in files:
             file_path = os.path.join(root, file)
             if os.path.getsize(file_path) < min_size_kb * 1024:
-                removedFileCount =+ 1
+                removedFileCount += 1  # Fixed the increment operator
                 print(f"Removing small image: {file_path}")
                 os.remove(file_path)
-    print(f"Removed {removedFileCount} small images from {root}")
+    print(f"Removed {removedFileCount} small images from {output_dir}")  # Fixed to show correct directory
 
 
 # Example usage
 if __name__ == "__main__":
-    label_dir = "/mnt/hpccs01/home/wardlewo/Data/cgras/2240605_cgras/valid/labels"  
-    image_dir = "/mnt/hpccs01/home/wardlewo/Data/cgras/2240605_cgras/valid/images" 
-    output_dir = "/mnt/hpccs01/home/wardlewo/Data/cgras/classifier/classifer_split/val"  
+    label_dir = "/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/dataset_2023_built_from_testSet_122/amag_test_0/labels"  
+    image_dir = "/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/dataset_2023_built_from_testSet_122/amag_test_0/images" 
+    output_dir = "/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/dataset_2023_built_from_testSet_122/2024_classes"  
     output_json_path = os.path.join(output_dir, "classifier_data.json")
     ignore_classes = [8, 9, 10]  # Example: ignore classes with indices 8 and 9
     process_labels_and_images(label_dir, image_dir, output_dir, output_json_path, ignore_classes)

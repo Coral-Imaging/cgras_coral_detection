@@ -16,8 +16,8 @@ def process_folder(labels_folder, images_folder, destination_folder, root_folder
     label_files = [f for f in os.listdir(labels_folder) if f.endswith('.txt')]
     
     # Separate non-empty and empty label files
-    non_empty_labels = [f for f in label_files if os.path.getsize(os.path.join(labels_folder, f)) > 0]
-    empty_labels = [f for f in label_files if os.path.getsize(os.path.join(labels_folder, f)) == 0]
+    non_empty_labels = [f for f in label_files if os.path.getsize(os.path.join(labels_folder, f)) >= 10]
+    empty_labels = [f for f in label_files if os.path.getsize(os.path.join(labels_folder, f)) < 10]
     print(f"Processing {labels_folder}:")
     print("Number of non-empty labels found:", len(non_empty_labels))
     print("Number of empty labels found:", len(empty_labels))
@@ -49,8 +49,8 @@ def process_folder(labels_folder, images_folder, destination_folder, root_folder
             print(f"Image not found for label: {label_file}")
 
 def main():
-    root_folder = "/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_split+patches/cgras_labels_fixed_split_n_tilled"
-    destination_folder = "/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+RemovedNegs"
+    root_folder = "/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/Reduced_dataset_patches/"
+    destination_folder = "/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/dataset_2023_built_from_testSet_122/"
     
     valid_folders = find_valid_folders(root_folder)
     

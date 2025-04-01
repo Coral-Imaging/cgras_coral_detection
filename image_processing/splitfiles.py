@@ -14,8 +14,8 @@ train_ratio = 0.70
 test_ratio = 0.15
 valid_ratio = 0.15
 
-data_locaton = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_full_subimages'
-save_dir_for_split = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_full_split+subimages' 
+data_locaton = '/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/20250318_improved_label_dataset_split_subimages/test'
+save_dir_for_split = '/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/Reduced_dataset_patches/fixxed_labels' 
 
 os.makedirs(save_dir_for_split, exist_ok=True)
 

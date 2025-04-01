@@ -12,47 +12,45 @@ from PIL import Image
 from shapely.geometry import Polygon, box, MultiPolygon, GeometryCollection
 from shapely.validation import explain_validity
 from tqdm import tqdm
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import time
+import argparse
+import signal
+import sys
 
-#from annotation.Utils import classes, class_colours 
-classes = ["recruit_live_white", "recruit_cluster_live_white", "recruit_symbiotic", "recruit_cluster_symbiotic", "recruit_partial",
-           "recruit_cluster_partial", "recruit_dead", "recruit_cluster_dead", "grazer_snail", "pest_tubeworm", "unknown"] #how its in cvat
-# Colours for each class
-orange = [255, 128, 0] 
-blue = [0, 212, 255] 
-purple = [170, 0, 255] 
-yellow = [255, 255, 0] 
-brown = [144, 65, 2] 
-green = [0, 255, 00] 
-red = [255, 0, 0]
-cyan = [0, 255, 255]
-dark_purple =  [128, 0, 128]
-light_grey =  [192, 192, 192] 
-dark_green = [0, 100, 0] 
-class_colours = {classes[0]: blue,
-                classes[1]: green,
-                classes[2]: purple,
-                classes[3]: yellow,
-                classes[4]: brown,
-                classes[5]: cyan,
-                classes[6]: orange,
-                classes[7]: red,
-                classes[8]: dark_purple,
-                classes[9]: light_grey,
-                classes[10]: dark_green}
+full_res_dir = '/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/Reduced_dataset_patches/fixxed_labels/valid'
+save_path = '/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/Reduced_dataset_patches'
 
+#full_res_dir = '/media/java/CGRAS-SSD/cgras_data_copied_2240605/samples/dec_17_split/train/'
+#save_path = '/media/java/CGRAS-SSD/cgras_data_copied_2240605/samples/dec_17_split_n_tilled/'
 
-full_res_dir = '/media/java/CGRAS-SSD/cgras_data_copied_2240605/samples/dec_17_split/train/'
-save_path = '/media/java/CGRAS-SSD/cgras_data_copied_2240605/samples/dec_17_split_n_tilled/'
+# Add argument parser for command line options
+parser = argparse.ArgumentParser(description='Tile images and annotations for YOLO training')
+parser.add_argument('--workers', type=int, default=None, help='Number of worker processes (default: CPU count)')
+parser.add_argument('--tile_width', type=int, default=640, help='Tile width (default: 640)')
+parser.add_argument('--tile_height', type=int, default=640, help='Tile height (default: 640)')
+parser.add_argument('--truncate', type=float, default=0.5, help='Minimum percentage of object that must be in tile (default: 0.5)')
+parser.add_argument('--max_files', type=int, default=16382, help='Maximum files per directory (default: 16382)')
+args = parser.parse_args()
 
-TILE_WIDTH= 640
-TILE_HEIGHT = 640
-TRUNCATE_PERCENT = 0.5
-prefix = 'train'
+# Use command line arguments if provided
+TILE_WIDTH = args.tile_width
+TILE_HEIGHT = args.tile_height
+TRUNCATE_PERCENT = args.truncate
+max_files = args.max_files
+
+# Set number of workers
+num_workers = args.workers if args.workers is not None else multiprocessing.cpu_count()
+print(f"Using {num_workers} worker processes")
+
+# Extract the prefix from the last part of full_res_dir
+prefix = os.path.basename(full_res_dir)
 
 #images in one folder, labels in another. Only want to do images with an ossociated label file
 imglist = sorted(glob.glob(os.path.join(full_res_dir, 'images', '*.jpg')))
 TILE_OVERLAP = round((TILE_HEIGHT+TILE_WIDTH)/2 * TRUNCATE_PERCENT)
-directory_count = 4
+directory_count = 0
 file_counter = 0   
 
 def make_sub_dirctory_save(prefix, save_path):
@@ -192,86 +190,341 @@ def calculate_img_section_no(img_name):
     y_tiles = (imgh + TILE_HEIGHT - TILE_OVERLAP - 1) // (TILE_HEIGHT - TILE_OVERLAP)
     return x_tiles*y_tiles
 
+# Modified to return information about the tile instead of writing directly
+def process_tile(args):
+    """Process a single tile from an image"""
+    img_name, txt_name, test_name, x_start, x_end, y_start, y_end, imgw, imgh = args
+    
+    # Read image once outside of the loop to avoid repeated disk I/O
+    pil_img = Image.open(img_name, mode='r')
+    np_img = np.array(pil_img, dtype=np.uint8)
+    
+    # Cut the tile from the image
+    cut_tile = np.zeros(shape=(TILE_HEIGHT, TILE_WIDTH, 3), dtype=np.uint8)
+    cut_tile[0:TILE_HEIGHT, 0:TILE_WIDTH, :] = np_img[y_start:y_end, x_start:x_end, :]
+    
+    # Process annotations
+    with open(txt_name, 'r') as file:
+        lines = file.readlines()
+    try:
+        writeline = cut_annotation(x_start, x_end, y_start, y_end, lines, imgw, imgh)
+    except Exception as e:
+        return None, None, str(e)
+    
+    return (test_name, x_start, y_start, cut_tile, writeline)
 
-def visualise(imgdir, save_path):
-    """Show all the annotations on to a set of cut images and save at save_path"""
-    imglist = glob.glob(os.path.join(imgdir, '*.jpg'))
-    for i, imgname in enumerate(imglist):
-        print(f'visulasing image {i+1}/{len(imglist)}')
-        base_name = os.path.basename(imgname[:-4])
-        img_name = os.path.join(save_img, base_name+'.jpg')
-        txt_name = os.path.join(save_labels, base_name+'.txt')
+def cut_parallel(img_name, save_img, test_name, save_labels, txt_name, img_no):
+    """Cut an image into tiles in parallel, save the annotations renormalized"""
+    # Read image dimensions once
+    img = cv.imread(img_name)
+    imgw, imgh = img.shape[1], img.shape[0]
+    
+    # Calculate step size for 50% overlap
+    step_size = TILE_WIDTH // 2
+    
+    # Calculate number of tiles in each dimension
+    x_tiles = (imgw - TILE_WIDTH) // step_size + 1
+    y_tiles = (imgh - TILE_HEIGHT) // step_size + 1
+    
+    # Add extra tile if needed to cover the image
+    if x_tiles * step_size + TILE_WIDTH < imgw:
+        x_tiles += 1
+    if y_tiles * step_size + TILE_HEIGHT < imgh:
+        y_tiles += 1
+        
+    total_tiles = x_tiles * y_tiles
+    
+    # Prepare arguments for each tile
+    tile_args = []
+    for x in range(x_tiles):
+        x_start = x * step_size
+        x_end = min(x_start + TILE_WIDTH, imgw)
+        
+        # Adjust x_start if we're at the edge
+        if x_end == imgw:
+            x_start = max(0, imgw - TILE_WIDTH)
+            
+        for y in range(y_tiles):
+            y_start = y * step_size
+            y_end = min(y_start + TILE_HEIGHT, imgh)
+            
+            # Adjust y_start if we're at the edge
+            if y_end == imgh:
+                y_start = max(0, imgh - TILE_HEIGHT)
+                
+            tile_args.append((img_name, txt_name, test_name, x_start, x_end, y_start, y_end, imgw, imgh))
+    
+    # Process tiles in parallel
+    results = []
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        futures = [executor.submit(process_tile, args) for args in tile_args]
+        
+        for future in tqdm(as_completed(futures), total=len(futures), desc=f"Processing image {test_name}", unit="tile"):
+            results.append(future.result())
+    
+    # Save results to disk
+    for result in results:
+        if result[0] is None:  # Error occurred
+            continue
+        
+        test_name, x_start, y_start, cut_tile, writeline = result
+        
+        # Save image
+        img_save_path = os.path.join(save_img, f"{test_name}_{str(x_start).zfill(4)}_{str(y_start).zfill(4)}.jpg")
+        cut_tile_img = Image.fromarray(cut_tile)
+        cut_tile_img.save(img_save_path)
+        
+        # Save annotation
+        txt_save_path = os.path.join(save_labels, f"{test_name}_{str(x_start).zfill(4)}_{str(y_start).zfill(4)}.txt")
+        with open(txt_save_path, 'w') as file:
+            for line in writeline:
+                file.write(" ".join(map(str, line)).replace('[', '').replace(']', '').replace(',', '') + "\n")
+    
+    return total_tiles
 
-        image = cv.imread(img_name)
-        height, width, _ = image.shape
-        #same code as annotation/view_predictions.py in the save_image_predictions_mask function, if groundtruth:
-        points_normalised, points, class_idx = [], [], []
-        with open(txt_name, "r") as file:
-            lines = file.readlines()
-        for line in lines:
-            data = line.strip().split()
-            class_idx.append(int(data[0]))
-            points_normalised.append([float(val) for val in data[1:]])
-        for data in points_normalised:
-            values = []
-            try:
-                for i in range(0, len(data), 2):
-                    x = round(data[i]*width)
-                    y = round(data[i+1]*height)
-                    values.extend([x,y])
-                points.append(values)
-            except:
-                points.append(values)
-                print(f'invalid line there is {len(data)} data, related to img {base_name}')
-                # import code
-                # code.interact(local=dict(globals(), **locals())) 
-        for idx in range(len(class_idx)):
-            pointers = np.array(points[idx], np.int32).reshape(-1,2)
-            cv.polylines(image, [pointers], True, class_colours[classes[class_idx[idx]]], 2)
-            cv.putText(image, classes[class_idx[idx]], (pointers[0][0], pointers[0][1]), cv.FONT_HERSHEY_SIMPLEX, 0.5, class_colours[classes[class_idx[idx]]], 2)
-        imgsavename = os.path.basename(img_name)
-        imgsave_path = os.path.join(save_path, imgsavename[:-4] + '_det.jpg')
-        cv.imwrite(imgsave_path, image)
-        # import code
-        # code.interact(local=dict(globals(), **locals()))
+# Global flag for handling KeyboardInterrupt
+stop_processing = False
 
-max_files = 16382
-for i, img in enumerate(imglist):
-    if i < 0:
-        continue
-    name = os.path.basename(img)[:-4]
-    img_name = os.path.join(full_res_dir,'images', name+'.jpg')
-    txt_name = os.path.join(full_res_dir,'labels', name+'.txt')
+def signal_handler(sig, frame):
+    """Handle interrupt signals to cleanly stop processing"""
+    global stop_processing
+    print("\nCaught signal, cleaning up...")
+    stop_processing = True
+    print("Will exit after current image completes...")
+    # Don't exit immediately to allow cleanup
 
-    files_to_add = calculate_img_section_no(img_name)
-    if file_counter+files_to_add >= max_files:
-        print(f'Directory full, as {file_counter} files already made and {files_to_add} will be made with next image')
-        directory_count += 1
-        file_counter = 0
+# Register the signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+def process_image(img_path, txt_path, save_img_dir, save_labels_dir, test_name):
+    """Process a complete image and its annotations, cutting into tiles"""
+    try:
+        # Read image
+        img = cv.imread(img_path)
+        if img is None:
+            return 0, f"Failed to read image {img_path}"
+
+        imgw, imgh = img.shape[1], img.shape[0]
+        
+        # Read image with PIL for better handling
+        try:
+            pil_img = Image.open(img_path)
+            np_img = np.array(pil_img)
+        except Exception as e:
+            return 0, f"Error reading image with PIL: {e}"
+        
+        # Read label file
+        try:
+            with open(txt_path, 'r') as file:
+                lines = file.readlines()
+        except Exception as e:
+            return 0, f"Failed to read label file {txt_path}: {e}"
+        
+        # Calculate tile grid parameters
+        step_size_x = TILE_WIDTH - TILE_OVERLAP
+        step_size_y = TILE_HEIGHT - TILE_OVERLAP
+        
+        x_tiles = (imgw - TILE_WIDTH + step_size_x) // step_size_x
+        y_tiles = (imgh - TILE_HEIGHT + step_size_y) // step_size_y
+        
+        # Handle edge cases
+        if x_tiles * step_size_x + TILE_WIDTH < imgw:
+            x_tiles += 1
+        if y_tiles * step_size_y + TILE_HEIGHT < imgh:
+            y_tiles += 1
+        
+        tiles_created = 0
+        
+        # Process each tile sequentially
+        for x in range(x_tiles):
+            x_start = x * step_size_x
+            x_end = min(x_start + TILE_WIDTH, imgw)
+            
+            # Adjust x_start if we're at the edge
+            if x_end == imgw:
+                x_start = max(0, imgw - TILE_WIDTH)
+                
+            for y in range(y_tiles):
+                y_start = y * step_size_y
+                y_end = min(y_start + TILE_HEIGHT, imgh)
+                
+                # Adjust y_start if we're at the edge
+                if y_end == imgh:
+                    y_start = max(0, imgh - TILE_HEIGHT)
+                
+                # Cut the tile from the image
+                cut_tile = np.zeros(shape=(TILE_HEIGHT, TILE_WIDTH, 3), dtype=np.uint8)
+                cut_tile[0:TILE_HEIGHT, 0:TILE_WIDTH, :] = np_img[y_start:y_end, x_start:x_end, :]
+                
+                # Generate filenames
+                img_save_path = os.path.join(save_img_dir, f"{test_name}_{str(x_start).zfill(4)}_{str(y_start).zfill(4)}.jpg")
+                txt_save_path = os.path.join(save_labels_dir, f"{test_name}_{str(x_start).zfill(4)}_{str(y_start).zfill(4)}.txt")
+                
+                # Process annotations
+                try:
+                    writeline = cut_annotation(x_start, x_end, y_start, y_end, lines, imgw, imgh)
+                except Exception as e:
+                    print(f"Error processing annotations for {test_name} at {x_start},{y_start}: {e}")
+                    continue
+                
+                # Save image
+                try:
+                    cut_tile_img = Image.fromarray(cut_tile)
+                    cut_tile_img.save(img_save_path)
+                except Exception as e:
+                    print(f"Error saving tile image {img_save_path}: {e}")
+                    continue
+                
+                # Save annotations
+                try:
+                    with open(txt_save_path, 'w') as file:
+                        for line in writeline:
+                            file.write(" ".join(map(str, line)).replace('[', '').replace(']', '').replace(',', '') + "\n")
+                except Exception as e:
+                    print(f"Error saving annotation file {txt_save_path}: {e}")
+                    continue
+                
+                tiles_created += 1
+                
+        return tiles_created, "Success"
+    
+    except Exception as e:
+        return 0, f"Error processing image: {str(e)}"
+
+def process_image_list(img_list, start_idx=0, max_images=None):
+    """Process a list of images, with support for resuming from a specific index"""
+    global stop_processing
+    
+    start_time = time.time()
+    processed_count = 0
+    total_tiles = 0
+    
+    try:
+        # Process images in a loop, optionally limited by max_images
+        for i, img in enumerate(img_list[start_idx:]):
+            idx = i + start_idx
+            
+            # Stop if reached max_images
+            if max_images is not None and i >= max_images:
+                print(f"Reached maximum number of images ({max_images})")
+                break
+                
+            # Check for interrupt
+            if stop_processing:
+                print(f"Processing stopped at image index {idx}")
+                break
+            
+            # Get image paths
+            name = os.path.basename(img)[:-4]
+            img_name = os.path.join(full_res_dir, 'images', name + '.jpg')
+            txt_name = os.path.join(full_res_dir, 'labels', name + '.txt')
+            
+            # Check if both files exist
+            if not os.path.exists(txt_name):
+                print(f"No text file for image {name}, skipping")
+                continue
+                
+            # Check if output directory needs to be changed
+            global file_counter, directory_count, save_img, save_labels
+            files_to_add = calculate_img_section_no(img_name)
+            if file_counter + files_to_add >= max_files:
+                print(f'Directory full, as {file_counter} files already made and {files_to_add} will be made with next image')
+                directory_count += 1
+                file_counter = 0
+                save_img, save_labels = make_sub_dirctory_save(prefix, save_path)
+            
+            # Process the image
+            print(f'Processing image {idx+1}/{len(img_list)}: {name}')
+            tiles_created, status = process_image(img_name, txt_name, save_img, save_labels, name)
+            
+            if tiles_created > 0:
+                processed_count += 1
+                total_tiles += tiles_created
+                file_counter += tiles_created
+                print(f"Image {name}: {status} - Created {tiles_created} tiles")
+            else:
+                print(f"Image {name}: {status}")
+            
+            # Save progress checkpoint
+            save_checkpoint(idx + 1, processed_count, total_tiles)
+            
+    except Exception as e:
+        print(f"Error in process_image_list: {e}")
+    finally:
+        # Calculate and print statistics
+        end_time = time.time()
+        duration = end_time - start_time
+        print(f"\nProcessed {processed_count} images ({total_tiles} tiles) in {duration:.2f} seconds")
+        if processed_count > 0:
+            print(f"Average: {duration/processed_count:.2f} seconds/image, {total_tiles/duration:.2f} tiles/second")
+        
+        return processed_count, total_tiles
+
+def save_checkpoint(image_index, processed_count, total_tiles):
+    """Save a checkpoint file to allow resuming progress"""
+    checkpoint = {
+        'image_index': image_index,
+        'processed_count': processed_count,
+        'total_tiles': total_tiles,
+        'directory_count': directory_count,
+        'file_counter': file_counter,
+        'timestamp': time.time()
+    }
+    
+    try:
+        checkpoint_path = os.path.join(save_path, f"{prefix}_checkpoint.txt")
+        with open(checkpoint_path, 'w') as f:
+            for key, value in checkpoint.items():
+                f.write(f"{key}={value}\n")
+    except Exception as e:
+        print(f"Error saving checkpoint: {e}")
+
+def load_checkpoint():
+    """Load the checkpoint file if it exists"""
+    checkpoint_path = os.path.join(save_path, f"{prefix}_checkpoint.txt")
+    checkpoint = {
+        'image_index': 0,
+        'processed_count': 0,
+        'total_tiles': 0,
+        'directory_count': 0,
+        'file_counter': 0,
+    }
+    
+    if os.path.exists(checkpoint_path):
+        try:
+            with open(checkpoint_path, 'r') as f:
+                for line in f:
+                    if '=' in line:
+                        key, value = line.strip().split('=', 1)
+                        if key in ['image_index', 'processed_count', 'total_tiles', 'directory_count', 'file_counter']:
+                            checkpoint[key] = int(float(value))
+            print(f"Loaded checkpoint: resuming from image {checkpoint['image_index']}")
+        except Exception as e:
+            print(f"Error loading checkpoint: {e}")
+    
+    return checkpoint
+
+# Replace the main execution part with the robust version
+if __name__ == "__main__":
+    # Add resume argument
+    parser.add_argument('--resume', action='store_true', help='Resume from the last checkpoint')
+    parser.add_argument('--start', type=int, default=0, help='Start processing from this image index')
+    parser.add_argument('--count', type=int, default=None, help='Process this many images (default: all)')
+    args = parser.parse_args()
+    
+    # Initialize or load checkpoint
+    start_idx = 0
+    if args.resume:
+        checkpoint = load_checkpoint()
+        directory_count = checkpoint['directory_count']
+        file_counter = checkpoint['file_counter']
+        start_idx = checkpoint['image_index']
         save_img, save_labels = make_sub_dirctory_save(prefix, save_path)
-
-    print(f"Looking for {txt_name}")
-    if os.path.exists(txt_name):
-        print(f'cutting image {i+1}/{len(imglist)}')
-        cut(img_name, save_img, name, save_labels, txt_name, i)
-        file_counter += files_to_add
-    else:
-        print("no text file for image")
-print("done")
-import code
-code.interact(local=dict(globals(), **locals())) 
-# vis_save_path = os.path.join(save_path, 'vis')
-# visualise(save_img, vis_save_path)
-
-
-# ######### With one image #############
-# test_name = '00_20230116_MIS1_RC_Aspat_T04_08'
-# img_name = os.path.join(full_res_dir,'images', test_name+'.jpg')
-# txt_name = os.path.join(full_res_dir,'labels', test_name+'.txt')
-# cut(img_name, save_img, test_name, save_labels)
-# print("done cutting test image")
-
-# visualise(save_img)
-# print("done visualise")
-# import code
-# code.interact(local=dict(globals(), **locals())) 
+    elif args.start > 0:
+        start_idx = args.start
+    
+    # Process the image list
+    processed_count, total_tiles = process_image_list(imglist, start_idx, args.count)
+    
+    print(f"Done! Processed {processed_count} images ({total_tiles} tiles)")

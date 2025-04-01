@@ -7,7 +7,7 @@ train basic yolov8 model for image segmentation
 from ultralytics import YOLO
 import torch
 
-data_file = '/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/Reduced_dataset_patches/cgras_2023+2024_dataset_seg_20250326.yaml'
+data_file = '/mnt/hpccs01/home/wardlewo/Corals/cgras_settler_counter/segmenter/cgras_alive_dead_seg_20250205.yaml'
 #data_file = sys.argv[1]
 
 # load model
@@ -22,18 +22,18 @@ model.info()
 # classes arg is lightweight and simply ignore classes that are not included in the classes list, 
 # during train, val and predict, it has no effect on model architecture.
 model.train(data=data_file, 
-            device      = [0,1,2,3],       #For HPC, set to 0 or delete otherwise      
+            device      = 0,       #For HPC, set to 0 or delete otherwise      
             epochs      = 750, 
-            batch       = 128,  
-            project     = "runs/20250326_cgras_seg_2023-2024_dataset",
-            name        = "20250326_8n_train_multiGpu_B128",
-            workers     = 8,
+            batch       = 0.95,  
+            project     = "LearningRate_20250319_cgras_segmentation_2022-2023_dataset_alive_dead",
+            workers     = 12,
             patience    = 50,
             pretrained  = False,
             save        = True,
             save_period = 25,
             deterministic = False,
             imgsz       = 640,
+            lr0         = 0.1,
             #Augmentation
             #HSV added via Albumentations
             scale       = 0.2,

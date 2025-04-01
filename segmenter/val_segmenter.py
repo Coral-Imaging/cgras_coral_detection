@@ -9,137 +9,78 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-weights_file = '/home/java/Java/hpc-home/20250205_cgras_segmentation_alive_dead/train7/weights/best.pt' #model
-conf_thresh = 0.25
-iou_thresh = 0.6
-
-# Load a model
+weights_file = '/mnt/hpccs01/home/wardlewo/2024_seg8n.pt' #model
+PROJECT_DIR = "runs/val/20250326_cgras_segmentation_DS2023_8n"
+CONF_THRESH = 0.5
+IOU_THRESH = 0.5
+IGNORE_CLASSES = None
+data_file = '/mnt/hpccs01/home/wardlewo/Corals/cgras_settler_counter/segmenter/combined_2023_2024.yaml'
+# -----------------------------
+# MODEL INITIALIZATION & VALIDATION
+# -----------------------------
 model = YOLO(weights_file)
+metrics_d = model.val(conf=CONF_THRESH, iou=IOU_THRESH, project=PROJECT_DIR, data=data_file, plots=True)
 
-# Validate the model
-#if not arguments, will use the defult arguments and validate on the Val files of the model trained dataset.
-metrics_d = model.val(conf=conf_thresh, iou=iou_thresh, project = "/home/java/Java/Cgras/20250205_cgras_segmentation_alive_dead", data='/home/java/Java/hpc-home/Corals/cgras_settler_counter/segmenter/cgras_alive_dead_seg_20250205.yaml', plots=True) #data='/media/wardlewo/cslics_ssd/SCU_Pdae_Data/split and tilling/cgras_20230421.yaml',
+# Get confusion matrix
+conf_mat_d = metrics_d.confusion_matrix.matrix  # Confusion matrix
 
-tp_d, fp_d = metrics_d.confusion_matrix.tp_fp() # returns 2 arrays, 1xN where N is the number of classes.
-conf_mat_d = metrics_d.confusion_matrix.matrix #has the confusion matrix as NXN array
-conf_mat_normalised = conf_mat_d / (conf_mat_d.sum(0).reshape(1, -1) + 1E-9)
+# Access the segmentation mAP@50
+map50 = metrics_d.seg.map50
 
-def get_TP_FP_FN_TN(conf_mat, class_ignore):
-    """get_TP_FP_FN_TN
-        Get the average True Positive, False Positive, False Negative and True Negative 
-        rates for the confusion matrix ignoring the classes in class_ignore.
-    """
-    if class_ignore is None:
-        class_ignore = []
-    
-    tp_d = conf_mat.diagonal()
-    fp_d = conf_mat.sum(1) - tp_d
-    fn_d = conf_mat.sum(0) - tp_d
-    total_samples = conf_mat.sum()
-    tn_d = np.zeros(conf_mat.shape[0])
-    for i in range(conf_mat.shape[0]):
-        tp = conf_mat[i, i]
-        row_sum = conf_mat[i, :].sum()
-        col_sum = conf_mat[:, i].sum()
-    tp_d = conf_mat.diagonal()
-    fp_d = conf_mat.sum(1) - tp_d
-    fn_d = conf_mat.sum(0) - tp_d
-    total_samples = conf_mat.sum()
-    tn_d = np.zeros(conf_mat.shape[0])
-    for i in range(conf_mat.shape[0]):
-        tp = conf_mat[i, i]
-        row_sum = conf_mat[i, :].sum()
-        col_sum = conf_mat[:, i].sum()
-        tn_d[i] = total_samples - row_sum - col_sum + tp
+# Access precision, recall and F1
+precision = metrics_d.seg.p  # Precision
+recall = metrics_d.seg.r     # Recall
+f1 = metrics_d.seg.f1        # F1 score
 
-    mask = np.ones(conf_mat.shape[0], dtype=bool)
-    mask[class_ignore] = False
+# Print the values
+print(f"Segmentation mAP@50: {map50:.4f}")
 
-    TPR = np.where((tp_d+ fn_d) > 0, tp_d/ (tp_d+ fn_d), 0)[mask]
-    FNR = np.where((tp_d+ fn_d) > 0, fn_d / (tp_d+ fn_d), 0)[mask]
-    FPR = np.where((fp_d+ tn_d) > 0, fp_d/ (fp_d+ tn_d), 0)[mask]
-    TNR = np.where((fp_d+ tn_d) > 0, tn_d / (fp_d+ tn_d), 0)[mask]
-    TPmean = np.mean(TPR)
-    FNmean = np.mean(FNR)
-    FPmean = np.mean(FPR)
-    TNmean = np.mean(TNR)
-    return TPmean, FNmean, FPmean, TNmean
+# Handle precision, recall, and F1 which may be arrays
+if hasattr(precision, 'shape') and precision.size > 1:
+    # If it's an array with multiple values (per class)
+    print(f"Precision (mean): {np.mean(precision):.4f}")
+    print("Precision per class:")
+    class_names = metrics_d.names if hasattr(metrics_d, 'names') else [f'Class {i}' for i in range(len(precision))]
+    for i, p in enumerate(precision):
+        print(f"  {class_names[i]}: {p:.4f}")
+else:
+    # If it's a single value
+    print(f"Precision: {float(precision):.4f}")
 
+# Do the same for recall
+if hasattr(recall, 'shape') and recall.size > 1:
+    print(f"Recall (mean): {np.mean(recall):.4f}")
+    print("Recall per class:")
+    class_names = metrics_d.names if hasattr(metrics_d, 'names') else [f'Class {i}' for i in range(len(recall))]
+    for i, r in enumerate(recall):
+        print(f"  {class_names[i]}: {r:.4f}")
+else:
+    print(f"Recall: {float(recall):.4f}")
 
-def p_r_f1(conf_mat, class_ignore=None):
-    if class_ignore is None:
-        class_ignore = []
-    
-    mask = np.ones(conf_mat.shape[0], dtype=bool)
-    mask[class_ignore] = False
+# And for F1
+if hasattr(f1, 'shape') and f1.size > 1:
+    print(f"F1 Score (mean): {np.mean(f1):.4f}")
+    print("F1 Score per class:")
+    class_names = metrics_d.names if hasattr(metrics_d, 'names') else [f'Class {i}' for i in range(len(f1))]
+    for i, f in enumerate(f1):
+        print(f"  {class_names[i]}: {f:.4f}")
+else:
+    print(f"F1 Score: {float(f1):.4f}")
 
-    tp_d = conf_mat.diagonal()
-    fp_d = conf_mat.sum(1) - tp_d
-    fn_d = conf_mat.sum(0) - tp_d
+# Plot confusion matrix
+plt.figure(figsize=(10, 8))
+conf_mat_norm = conf_mat_d.astype('float') / (conf_mat_d.sum(axis=1)[:, np.newaxis] + 1e-6)  # normalize
 
-    precision = np.where((tp_d + fp_d) > 0, tp_d / (tp_d + fp_d), 0)[mask]
-    recall = np.where((tp_d + fn_d) > 0, tp_d / (tp_d + fn_d), 0)[mask]
-    F1 = np.where((precision + recall) > 0, 2 * precision * recall / (precision + recall), 0)
+# Get class names if available
+class_names = metrics_d.names if hasattr(metrics_d, 'names') else [f'Class {i}' for i in range(conf_mat_d.shape[0])]
 
-    avg_precision = np.mean(precision)
-    avg_recall = np.mean(recall)
-    avg_F1 = np.mean(F1)
-
-    return avg_precision, avg_recall, avg_F1
-
-
-def plot_results(data, conf_thresh, iou_thresh):
-    """plot_results
-    Plot the data in a heatmap
-    """
-    x_labels = ['P (Positive)', 'N (Negative)']  # x-axis labels
-    y_labels = ['T (True)', 'F (False)']  # y-axis labels
-    plt.figure(figsize=(6, 4))
-    sns.heatmap(data, annot=True, fmt=".2%", cmap='Blues', xticklabels=x_labels, yticklabels=y_labels)
-    plt.title(f"Simplified confusion matrix with confidence of {conf_thresh:.2f} and IOU of {iou_thresh:.2f}")
-    plt.show()
-
-TPmean, FNmean, FPmean, TNmean = get_TP_FP_FN_TN(conf_mat_d, class_ignore=[0,1,7])
-data = np.array([[TPmean, TNmean], [FPmean, FNmean]])
-plot_results(data, conf_thresh, iou_thresh)
-
-precision, recall, F1 = p_r_f1(conf_mat_d, class_ignore=[2, 3, 4, 5, 6, 7, 8, 9, 10])
-
-print("---------------Results---------------------")
-
-print(f"TP={TPmean:.4f}, FP={FPmean:.4f}, FN={FNmean:.4f}, TN={TNmean:.4f}")
-print(f"Precision={precision:.4f}, Recall={recall:.4f}, F1={F1:.4f}")
-print(f"mAP50={metrics_d.map50} mAP50-95={metrics_d.map:.4f}")
-## Visulise instances
-
-print(f"MAP50-90 for all classes{metrics_d.seg.map}")
-print(f"MAP50 for all classes {metrics_d.seg.map50}")
-print(f"MAP50-90 for each class: {metrics_d.seg.maps}") #including classes not trained on
-print(f"MAP50 for each class: {metrics_d.seg.ap50}") #excluding classes not trained on
-
-print("Done")
-import code
-code.interact(local=dict(globals(), **locals()))
-
-
-metrics_d.box.map    # map50-95
-metrics_d.box.map50  # map50
-metrics_d.box.map75  # map75
-metrics_d.box.maps   # a list contains map50-95 of each category
-metrics_d.box.p   # Precision for each class
-metrics_d.box.r   # Recall for each class
-metrics_d.box.all_ap  # AP scores for all classes and all IoU thresholds
-metrics_d.box.ap_class_index  # Index of class for each AP
-metrics_d.box.nc  # Number of classes
-metrics_d.box.ap50  # AP at IoU threshold of 0.5 for all classes
-metrics_d.box.ap  # AP at IoU thresholds from 0.5 to 0.95 for all classes
-metrics_d.box.mp  # Mean precision of all classes
-metrics_d.box.mr  # Mean recall of all classes
-metrics_d.box.map50  # Mean AP at IoU threshold of 0.5 for all classes
-metrics_d.box.map75  # Mean AP at IoU threshold of 0.75 for all classes
-metrics_d.box.map  # Mean AP at IoU thresholds from 0.5 to 0.95 for all classes
-metrics_d.box.mean_results  # Mean of results
-metrics_d.box.class_result  # Class-aware result
-metrics_d.box.maps  # mAP of each class
-metrics_d.box.fitness  # Model fitness as a weighted combination of metrics_d
-metrics_d.confusion_matrix.print() #print RAW confusion metrix
+# Create heatmap
+sns.heatmap(conf_mat_norm, annot=True, fmt='.2f', cmap='Blues',
+           xticklabels=class_names,
+           yticklabels=class_names)
+plt.xlabel('Predicted')
+plt.ylabel('True')
+plt.title('Normalized Confusion Matrix')
+plt.tight_layout()
+plt.savefig(f"{PROJECT_DIR}/confusion_matrix.png")
+plt.show()
