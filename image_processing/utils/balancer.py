@@ -329,6 +329,10 @@ class DatasetBalancer:
         plotted_splits = []
         split_colors = {}
         
+        # Keep track of actual plotted splits and their colors
+        plotted_splits = []
+        split_colors = {}
+        
         # Plot each split's datasets
         for i, split in enumerate(splits):
             datasets = self.split_stats[split]['datasets']
@@ -351,6 +355,11 @@ class DatasetBalancer:
             if not dataset_names:
                 continue
                 
+            
+            # If no valid datasets with data, skip this split
+            if not dataset_names:
+                continue
+                
             # Calculate positions for this split
             n_datasets = len(dataset_names)
             positions = np.arange(current_pos, current_pos + n_datasets)
@@ -358,6 +367,22 @@ class DatasetBalancer:
             
             # Plot non-empty and empty counts for this split
             width = 0.35
+            color_idx = len(plotted_splits)  # Use actual plotted count for color
+            
+            # Plot bars with consistent colors
+            bar1 = ax.bar(positions - width/2, non_empty_counts, width, 
+                label=f'{split} - Non-Empty' if split not in plotted_splits else '', 
+                color=f'C{color_idx}', alpha=0.8)
+            bar2 = ax.bar(positions + width/2, empty_counts, width, 
+                label=f'{split} - Empty' if split not in plotted_splits else '', 
+                color=f'C{color_idx}', alpha=0.4)
+            
+            # Store color information for legend
+            split_colors[split] = (bar1[0], color_idx)
+            
+            # Add to plotted splits
+            if split not in plotted_splits:
+                plotted_splits.append(split)
             color_idx = len(plotted_splits)  # Use actual plotted count for color
             
             # Plot bars with consistent colors
@@ -392,13 +417,21 @@ class DatasetBalancer:
         ax.set_xlabel('Datasets')
         
         # Create custom legend with one entry per actually plotted split
+        # Create custom legend with one entry per actually plotted split
         custom_legend = []
+        for split in plotted_splits:
         for split in plotted_splits:
             if split in split_positions and len(split_positions[split]) > 0:
                 # Use the stored bar and color information
                 bar, _ = split_colors[split]
                 custom_legend.append((bar, split))
+                # Use the stored bar and color information
+                bar, _ = split_colors[split]
+                custom_legend.append((bar, split))
         
+        # Add the legend if we have any items
+        if custom_legend:
+            ax.legend(*zip(*custom_legend), loc='upper right')
         # Add the legend if we have any items
         if custom_legend:
             ax.legend(*zip(*custom_legend), loc='upper right')
@@ -409,6 +442,21 @@ class DatasetBalancer:
         # 2. Plot original vs balanced by split type
         plt.figure(figsize=(10, 6))
         
+        # Prepare data - only include splits that have data
+        split_names = []
+        original_counts = []
+        balanced_counts = []
+        
+        for split in self.split_stats.keys():
+            if self.split_stats[split]['total'] > 0:
+                split_names.append(split)
+                original_counts.append(self.split_stats[split]['total'])
+                balanced_counts.append(self.split_stats[split]['balanced_sample'])
+        
+        # Skip plotting if no data
+        if not split_names:
+            print("No splits with data to plot.")
+            return
         # Prepare data - only include splits that have data
         split_names = []
         original_counts = []
@@ -661,6 +709,7 @@ class DatasetBalancer:
         # We're preserving the directory structure, so the relative paths stay the same
         
         # Write the YAML file
+        yaml_path = self.output_path / "cgras_data.yaml"
         yaml_path = self.output_path / "cgras_data.yaml"
         self.new_yaml_path = yaml_path
         with open(yaml_path, 'w') as f:

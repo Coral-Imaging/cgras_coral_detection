@@ -36,7 +36,7 @@ patch:
   enabled: true
   tile_width: 640
   tile_height: 640
-  truncate_percent: 0.5  # Minimum percentage of object that must be in tile
+  truncate_percent: 0.5  # Minimum percentage of object that must be in tile # check whether we still want this
   max_files: 16382  # Maximum files per directory
 
 balance:
