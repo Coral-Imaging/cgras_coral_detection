@@ -571,13 +571,24 @@ class DatasetBalancer:
                             data_path = self.dataset_stats[dataset_name]['path']
                             full_path = self.base_dir / data_path
                             
+                            dataset_dir = Path(data_path).parent
+                            if str(dataset_dir) == '.':
+                                print(f"WARNING: Dataset path {data_path} has no parent. Using dataset name directly.")
+                                dataset_dir = dataset_name
+
+
                             # Get relative paths from the dataset directory
                             rel_img_path = img_path.relative_to(full_path.parent)
-                            
-                            # Determine destination paths
-                            dst_img_path = self.output_path / rel_img_path
-                            dst_label_path = self._find_label_path(dst_img_path)
-                            
+                            data_path_last_part = Path(data_path).name
+                            dst_img_path = self.output_path / dataset_dir / data_path_last_part / rel_img_path
+
+                            if 'images' in str(dst_img_path):
+                                dst_label_dir = str(dst_img_path.parent).replace('images', 'labels')
+                                dst_label_path = Path(dst_label_dir) / f"{dst_img_path.stem}.txt"
+                            else:
+                                # Fallback if the directory doesn't follow the convention
+                                dst_label_path = dst_img_path.with_suffix('.txt')
+
                             # Create directory structure
                             os.makedirs(dst_img_path.parent, exist_ok=True)
                             os.makedirs(dst_label_path.parent, exist_ok=True)
@@ -634,38 +645,6 @@ class DatasetBalancer:
         
         return balanced_stats
     
-    def _create_output_structure(self, data_path):
-        """
-        Create output directory structure for a dataset.
-        
-        Args:
-            data_path (str): Path to dataset
-            
-        Returns:
-            Path: Output directory path
-        """
-        # Determine dataset type (train/val/test)
-        dataset_type = None
-        for key, paths in self.dataset_paths.items():
-            if data_path in paths:
-                dataset_type = key
-                break
-        
-        if not dataset_type:
-            dataset_type = 'data'  # Default if not found
-        
-        # Create the output structure
-        dataset_name = self._extract_dataset_name(data_path)
-        
-        # Keep the same structure as the original
-        rel_path = Path(data_path).parent
-        output_path = self.output_path / rel_path
-        
-        # Create the directory
-        os.makedirs(output_path, exist_ok=True)
-        
-        return output_path
-    
     def _generate_yaml(self):
         """
         Generate a new YAML file for the balanced dataset.
@@ -694,7 +673,7 @@ class DatasetBalancer:
                     pass
         
         # Write the YAML file
-        yaml_path = self.output_path / "balanced_data.yaml"
+        yaml_path = self.output_path / "cgras_data.yaml"
         self.new_yaml_path = yaml_path
         with open(yaml_path, 'w') as f:
             yaml.dump(balanced_yaml, f, default_flow_style=False, sort_keys=False)
