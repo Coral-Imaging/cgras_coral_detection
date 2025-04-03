@@ -10,36 +10,35 @@ import torch
 
 from ultralytics import YOLO
 
-# DATA_PATH = "/mnt/hpccs01/home/gonia/data"
-# DATA_PATH = "/media/java/RRAP03/data/outputs/data_pipleline/tiled/test2"
+DATA_PATH = "~/data/outputs/"
+# DATA_PATH = "/media/java/RRAP03"
 
 # Training parameters
-MODEL_NAME = "best_2024.pt"
+# MODEL_NAME = "best_2024.pt"
+MODEL_NAME = "yolov8n-seg.pt"
 
 PROJECT = "cgras_segmentation"
-NAME = "train_coral_polyp"
-CLASSES = [0,1,2,3] # Coral and Polyp
+NAME = "train_coral_100_yolo"
+CLASSES = [2,3] # Coral and Polyp
 
 PRETRAINED = True
 EPOCHS = 1000
-BATCH_SIZE = 0.8
-WORKERS = 32
+BATCH_SIZE = 512
+WORKERS = 8
 SAVE_PERIOD = 10
 PATIENCE = 25
 MASK_OVERLAP = False
 
-# model_path = os.path.join(DATA_PATH, "models", MODEL_NAME)
-# yaml_data_path = os.path.join(DATA_PATH, "train/cgras_data.yaml")
-model_path = "/media/java/RRAP03/models/yolov8n-seg.pt"
-yaml_data_path = "/media/java/RRAP03/data/outputs/data_pipleline/tiled/test2/cgras_data.yaml"
+model_path = os.path.join(DATA_PATH, "models", MODEL_NAME)
+yaml_data_path = "/mnt/hpccs01/home/gonia/data/outputs/processed_data4/cgras_data.yaml"
 
 # Train the model
 print("\n Starting YOLOv8 Training...")
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = [0, 1, 2, 3]
 print(f"Device: {device}")
 
-model = YOLO(model_path)
+model = YOLO(MODEL_NAME)
 model.info()
 
 model.train(

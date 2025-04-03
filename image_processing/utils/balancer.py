@@ -9,8 +9,6 @@ from pathlib import Path
 import concurrent.futures
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Tuple, Any, Optional, Union
-
 
 class DatasetBalancer:
     """
@@ -327,6 +325,10 @@ class DatasetBalancer:
         split_positions = {}
         current_pos = 0
         
+        # Keep track of actual plotted splits and their colors
+        plotted_splits = []
+        split_colors = {}
+        
         # Plot each split's datasets
         for i, split in enumerate(splits):
             datasets = self.split_stats[split]['datasets']
@@ -345,6 +347,10 @@ class DatasetBalancer:
                     non_empty_counts.append(self.dataset_stats[ds_name]['non_empty'])
                     empty_counts.append(self.dataset_stats[ds_name]['empty'])
             
+            # If no valid datasets with data, skip this split
+            if not dataset_names:
+                continue
+                
             # Calculate positions for this split
             n_datasets = len(dataset_names)
             positions = np.arange(current_pos, current_pos + n_datasets)
@@ -352,10 +358,22 @@ class DatasetBalancer:
             
             # Plot non-empty and empty counts for this split
             width = 0.35
-            ax.bar(positions - width/2, non_empty_counts, width, label=f'{split} - Non-Empty' if i == 0 else '', 
-                color=f'C{i}', alpha=0.8)
-            ax.bar(positions + width/2, empty_counts, width, label=f'{split} - Empty' if i == 0 else '', 
-                color=f'C{i}', alpha=0.4)
+            color_idx = len(plotted_splits)  # Use actual plotted count for color
+            
+            # Plot bars with consistent colors
+            bar1 = ax.bar(positions - width/2, non_empty_counts, width, 
+                label=f'{split} - Non-Empty' if split not in plotted_splits else '', 
+                color=f'C{color_idx}', alpha=0.8)
+            bar2 = ax.bar(positions + width/2, empty_counts, width, 
+                label=f'{split} - Empty' if split not in plotted_splits else '', 
+                color=f'C{color_idx}', alpha=0.4)
+            
+            # Store color information for legend
+            split_colors[split] = (bar1[0], color_idx)
+            
+            # Add to plotted splits
+            if split not in plotted_splits:
+                plotted_splits.append(split)
             
             # Add dataset names
             ax.set_xticks(positions)
@@ -373,19 +391,17 @@ class DatasetBalancer:
         ax.set_ylabel('Number of Labels')
         ax.set_xlabel('Datasets')
         
-        # Add legend
-        handles, labels = ax.get_legend_handles_labels()
-        legend_pairs = [(handles[i], handles[i+1]) for i in range(0, len(handles), 2)]
-        legend_labels = [labels[i].split(' - ')[0] for i in range(0, len(labels), 2)]
-        
-        # Create custom legend with a single entry per split
+        # Create custom legend with one entry per actually plotted split
         custom_legend = []
-        for i, split in enumerate(splits):
+        for split in plotted_splits:
             if split in split_positions and len(split_positions[split]) > 0:
-                # Create a tuple of (line, label) for the legend
-                custom_legend.append((handles[i*2], split))
+                # Use the stored bar and color information
+                bar, _ = split_colors[split]
+                custom_legend.append((bar, split))
         
-        ax.legend(*zip(*custom_legend), loc='upper right')
+        # Add the legend if we have any items
+        if custom_legend:
+            ax.legend(*zip(*custom_legend), loc='upper right')
         
         plt.tight_layout()
         plt.show()
@@ -393,10 +409,21 @@ class DatasetBalancer:
         # 2. Plot original vs balanced by split type
         plt.figure(figsize=(10, 6))
         
-        # Prepare data
-        split_names = list(self.split_stats.keys())
-        original_counts = [self.split_stats[split]['total'] for split in split_names]
-        balanced_counts = [self.split_stats[split]['balanced_sample'] for split in split_names]
+        # Prepare data - only include splits that have data
+        split_names = []
+        original_counts = []
+        balanced_counts = []
+        
+        for split in self.split_stats.keys():
+            if self.split_stats[split]['total'] > 0:
+                split_names.append(split)
+                original_counts.append(self.split_stats[split]['total'])
+                balanced_counts.append(self.split_stats[split]['balanced_sample'])
+        
+        # Skip plotting if no data
+        if not split_names:
+            print("No splits with data to plot.")
+            return
         
         # Plot
         x = np.arange(len(split_names))
@@ -423,7 +450,8 @@ class DatasetBalancer:
     def balance_datasets(self, random_seed=42):
         """
         Balance all datasets by ensuring equal numbers of empty and non-empty label files,
-        treating each split (train/val/test) as a whole group.
+        treating each split (train/val/test) as a whole group, but preserving the original
+        directory structure within each split.
         
         Args:
             random_seed (int): Random seed for reproducibility
@@ -542,12 +570,23 @@ class DatasetBalancer:
                             data_path = self.dataset_stats[dataset_name]['path']
                             full_path = self.base_dir / data_path
                             
-                            # Get relative paths from the dataset directory
-                            rel_img_path = img_path.relative_to(full_path.parent)
+                            # Extract the dataset directory name
+                            # This is the key fix - preserve the dataset directory structure
+                            dataset_dir = Path(data_path).parent
+                            if str(dataset_dir) == '.':  # Handle root paths
+                                dataset_dir = Path(data_path).name
                             
-                            # Determine destination paths
-                            dst_img_path = self.output_path / rel_img_path
-                            dst_label_path = self._find_label_path(dst_img_path)
+                            # Get relative path of the image from its dataset base directory
+                            rel_img_path = img_path.relative_to(full_path)
+                            
+                            # Preserve the dataset directory structure in the output path
+                            # Create dataset_dir/images structure in output
+                            dst_path = self.output_path / dataset_dir
+                            dst_img_path = dst_path / rel_img_path
+                            
+                            # Get the corresponding label path
+                            dst_label_dir = str(dst_img_path.parent).replace('images', 'labels')
+                            dst_label_path = Path(dst_label_dir) / f"{dst_img_path.stem}.txt"
                             
                             # Create directory structure
                             os.makedirs(dst_img_path.parent, exist_ok=True)
@@ -605,38 +644,6 @@ class DatasetBalancer:
         
         return balanced_stats
     
-    def _create_output_structure(self, data_path):
-        """
-        Create output directory structure for a dataset.
-        
-        Args:
-            data_path (str): Path to dataset
-            
-        Returns:
-            Path: Output directory path
-        """
-        # Determine dataset type (train/val/test)
-        dataset_type = None
-        for key, paths in self.dataset_paths.items():
-            if data_path in paths:
-                dataset_type = key
-                break
-        
-        if not dataset_type:
-            dataset_type = 'data'  # Default if not found
-        
-        # Create the output structure
-        dataset_name = self._extract_dataset_name(data_path)
-        
-        # Keep the same structure as the original
-        rel_path = Path(data_path).parent
-        output_path = self.output_path / rel_path
-        
-        # Create the directory
-        os.makedirs(output_path, exist_ok=True)
-        
-        return output_path
-    
     def _generate_yaml(self):
         """
         Generate a new YAML file for the balanced dataset.
@@ -650,52 +657,46 @@ class DatasetBalancer:
         # Update the 'path' field
         balanced_yaml['path'] = str(self.output_path.absolute())
         
-        # Update dataset paths
-        for key, paths in self.dataset_paths.items():
-            if key in balanced_yaml:
-                # For list format
-                if isinstance(balanced_yaml[key], list):
-                    balanced_yaml[key] = paths  # Keep the same relative paths
-                # For string format
-                elif isinstance(balanced_yaml[key], str):
-                    balanced_yaml[key] = paths[0] if paths else balanced_yaml[key]
-                # For dict format
-                elif isinstance(balanced_yaml[key], dict):
-                    # Keep the same structure, paths will be relative to new location
-                    pass
+        # Keep the same paths for dataset references
+        # We're preserving the directory structure, so the relative paths stay the same
         
         # Write the YAML file
-        yaml_path = self.output_path / "balanced_data.yaml"
+        yaml_path = self.output_path / "cgras_data.yaml"
         self.new_yaml_path = yaml_path
         with open(yaml_path, 'w') as f:
             yaml.dump(balanced_yaml, f, default_flow_style=False, sort_keys=False)
 
 
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Balance YOLO datasets by equalizing empty and non-empty labels")
-    parser.add_argument("yaml_path", help="Path to the YOLO data YAML file")
-    parser.add_argument("--output", help="Path where balanced data should be saved")
-    parser.add_argument("--analyze", action="store_true", help="Only analyze label balance without creating balanced dataset")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
-    parser.add_argument("--threads", type=int, help="Number of worker threads")
-    
-    args = parser.parse_args()
-    
-    balancer = DatasetBalancer(args.yaml_path, args.output, args.threads)
-    
-    if args.analyze:
-        balancer.analyze_dataset_balance()
-        balancer.plot_dataset_balance()
-    else:
-        print("Analyzing dataset balance...")
-        balancer.analyze_dataset_balance()
-        balancer.plot_dataset_balance()
+    if __name__ == "__main__":
+        import argparse
         
-        print("\nProceed with balancing using these settings? (y/n)")
-        user_input = input()
-        if user_input.lower() == 'y':
-            balancer.balance_datasets(random_seed=args.seed)
+        parser = argparse.ArgumentParser(description="Balance YOLO datasets by equalizing empty and non-empty labels")
+        parser.add_argument("yaml_path", help="Path to the YOLO data YAML file")
+        parser.add_argument("--output", help="Path where balanced data should be saved")
+        parser.add_argument("--analyze", action="store_true", help="Only analyze label balance without creating balanced dataset")
+        parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
+        parser.add_argument("--threads", type=int, help="Number of worker threads")
+        parser.add_argument("--no-prompt", action="store_true", help="Skip confirmation prompt before balancing")
+        
+        args = parser.parse_args()
+        
+        balancer = DatasetBalancer(args.yaml_path, args.output, args.threads)
+        
+        if args.analyze:
+            balancer.analyze_dataset_balance()
+            balancer.plot_dataset_balance()
         else:
-            print("Balancing canceled.")
+            print("Analyzing dataset balance...")
+            balancer.analyze_dataset_balance()
+            balancer.plot_dataset_balance()
+            
+            proceed = True
+            if not args.no_prompt:
+                print("\nProceed with balancing using these settings? (y/n)")
+                user_input = input()
+                proceed = user_input.lower() == 'y'
+                
+            if proceed:
+                balancer.balance_datasets(random_seed=args.seed)
+            else:
+                print("Balancing canceled.")
