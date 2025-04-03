@@ -327,6 +327,10 @@ class DatasetBalancer:
         split_positions = {}
         current_pos = 0
         
+        # Keep track of actual plotted splits and their colors
+        plotted_splits = []
+        split_colors = {}
+        
         # Plot each split's datasets
         for i, split in enumerate(splits):
             datasets = self.split_stats[split]['datasets']
@@ -345,6 +349,10 @@ class DatasetBalancer:
                     non_empty_counts.append(self.dataset_stats[ds_name]['non_empty'])
                     empty_counts.append(self.dataset_stats[ds_name]['empty'])
             
+            # If no valid datasets with data, skip this split
+            if not dataset_names:
+                continue
+                
             # Calculate positions for this split
             n_datasets = len(dataset_names)
             positions = np.arange(current_pos, current_pos + n_datasets)
@@ -352,10 +360,22 @@ class DatasetBalancer:
             
             # Plot non-empty and empty counts for this split
             width = 0.35
-            ax.bar(positions - width/2, non_empty_counts, width, label=f'{split} - Non-Empty' if i == 0 else '', 
-                color=f'C{i}', alpha=0.8)
-            ax.bar(positions + width/2, empty_counts, width, label=f'{split} - Empty' if i == 0 else '', 
-                color=f'C{i}', alpha=0.4)
+            color_idx = len(plotted_splits)  # Use actual plotted count for color
+            
+            # Plot bars with consistent colors
+            bar1 = ax.bar(positions - width/2, non_empty_counts, width, 
+                label=f'{split} - Non-Empty' if split not in plotted_splits else '', 
+                color=f'C{color_idx}', alpha=0.8)
+            bar2 = ax.bar(positions + width/2, empty_counts, width, 
+                label=f'{split} - Empty' if split not in plotted_splits else '', 
+                color=f'C{color_idx}', alpha=0.4)
+            
+            # Store color information for legend
+            split_colors[split] = (bar1[0], color_idx)
+            
+            # Add to plotted splits
+            if split not in plotted_splits:
+                plotted_splits.append(split)
             
             # Add dataset names
             ax.set_xticks(positions)
@@ -373,19 +393,17 @@ class DatasetBalancer:
         ax.set_ylabel('Number of Labels')
         ax.set_xlabel('Datasets')
         
-        # Add legend
-        handles, labels = ax.get_legend_handles_labels()
-        legend_pairs = [(handles[i], handles[i+1]) for i in range(0, len(handles), 2)]
-        legend_labels = [labels[i].split(' - ')[0] for i in range(0, len(labels), 2)]
-        
-        # Create custom legend with a single entry per split
+        # Create custom legend with one entry per actually plotted split
         custom_legend = []
-        for i, split in enumerate(splits):
+        for split in plotted_splits:
             if split in split_positions and len(split_positions[split]) > 0:
-                # Create a tuple of (line, label) for the legend
-                custom_legend.append((handles[i*2], split))
+                # Use the stored bar and color information
+                bar, _ = split_colors[split]
+                custom_legend.append((bar, split))
         
-        ax.legend(*zip(*custom_legend), loc='upper right')
+        # Add the legend if we have any items
+        if custom_legend:
+            ax.legend(*zip(*custom_legend), loc='upper right')
         
         plt.tight_layout()
         plt.show()
@@ -393,10 +411,21 @@ class DatasetBalancer:
         # 2. Plot original vs balanced by split type
         plt.figure(figsize=(10, 6))
         
-        # Prepare data
-        split_names = list(self.split_stats.keys())
-        original_counts = [self.split_stats[split]['total'] for split in split_names]
-        balanced_counts = [self.split_stats[split]['balanced_sample'] for split in split_names]
+        # Prepare data - only include splits that have data
+        split_names = []
+        original_counts = []
+        balanced_counts = []
+        
+        for split in self.split_stats.keys():
+            if self.split_stats[split]['total'] > 0:
+                split_names.append(split)
+                original_counts.append(self.split_stats[split]['total'])
+                balanced_counts.append(self.split_stats[split]['balanced_sample'])
+        
+        # Skip plotting if no data
+        if not split_names:
+            print("No splits with data to plot.")
+            return
         
         # Plot
         x = np.arange(len(split_names))
