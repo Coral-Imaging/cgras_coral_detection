@@ -1,12 +1,14 @@
+#! /usr/bin/env python3
+
 import os
 import re
 import yaml
+import pulp
 import random
 import shutil
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from collections import Counter, defaultdict
 from tqdm import tqdm
 import concurrent.futures
 import matplotlib.pyplot as plt
@@ -33,6 +35,7 @@ class DatasetSplitter:
         self.label_paths = []
         self.file_info = []  # Stores parsed file information
         self.max_workers = min(32, os.cpu_count() + 4)
+        self.new_yaml_path = None
         
         # Regex pattern for CGRAS file naming convention
         # CGRAS_<Species>_<Room>_<date>_w<week_number>_T<tile_number>_<index_number>.jpg
@@ -251,6 +254,87 @@ class DatasetSplitter:
                 
             self.count_by_field(field)
     
+    def preview_split(self, split_field="tile", train_ratio=0.7, val_ratio=0.15, test_ratio=0.15,
+                      stratify_by=None, random_seed=42):
+        """
+        Preview split distribution using ILP optimization, without modifying any files or assignments.
+
+        Args:
+            split_field (str): Field to split by
+            train_ratio (float): Desired training split
+            val_ratio (float): Desired validation split
+            test_ratio (float): Desired test split
+            stratify_by (str, optional): Field to stratify by
+            random_seed (int): Random seed for reproducibility
+
+        Returns:
+            dict: Proposed split assignments
+        """
+        if self.file_info is None or len(self.file_info) == 0:
+            self.parse_file_info()
+
+        if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
+            raise ValueError("Split ratios must sum to 1.0")
+
+        if split_field not in self.file_info.columns:
+            raise ValueError(f"Invalid split field: {split_field}")
+
+        random.seed(random_seed)
+        np.random.seed(random_seed)
+
+        unique_values = self.file_info[split_field].unique()
+        global_value_counts = {}
+
+        if stratify_by and stratify_by != split_field:
+            assignments = {}
+            groups = self.file_info.groupby(stratify_by)
+            for _, group_df in groups:
+                group_values = group_df[split_field].unique()
+                value_counts = {val: len(group_df[group_df[split_field] == val]) for val in group_values}
+                global_value_counts.update(value_counts)
+                total = sum(value_counts.values())
+                target_train = total * train_ratio
+                target_val = total * val_ratio
+                target_test = total * test_ratio
+                partial = self._optimize_split(value_counts, target_train, target_val, target_test)
+                assignments.update(partial)
+        else:
+            value_counts = {val: len(self.file_info[self.file_info[split_field] == val]) for val in unique_values}
+            global_value_counts = value_counts
+            total = sum(value_counts.values())
+            target_train = total * train_ratio
+            target_val = total * val_ratio
+            target_test = total * test_ratio
+            assignments = self._optimize_split(value_counts, target_train, target_val, target_test)
+
+        # Count totals for each split
+        split_counts = {'train': 0, 'val': 0, 'test': 0}
+        for val, split in assignments.items():
+            split_counts[split] += global_value_counts[val]
+
+        # Plot 1: Actual split counts
+        plt.figure(figsize=(8, 4))
+        plt.bar(split_counts.keys(), split_counts.values())
+        plt.title("Proposed Split Counts")
+        plt.ylabel("Number of Items")
+        plt.tight_layout()
+        plt.show()
+
+        # Plot 2: Difference from target
+        total = sum(split_counts.values())
+        actual_ratios = {k: v / total for k, v in split_counts.items()}
+        target_ratios = {'train': train_ratio, 'val': val_ratio, 'test': test_ratio}
+        diff = {k: abs(actual_ratios[k] - target_ratios[k]) for k in split_counts}
+
+        plt.figure(figsize=(8, 4))
+        plt.bar(diff.keys(), diff.values())
+        plt.title("Absolute Deviation from Target Ratios")
+        plt.ylabel("Deviation")
+        plt.tight_layout()
+        plt.show()
+
+        return assignments
+
     def create_splits(self, split_field='tile', train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, 
                      stratify_by=None, random_seed=42):
         """
@@ -387,36 +471,87 @@ class DatasetSplitter:
     
     def _optimize_split(self, value_counts, target_train, target_val, target_test):
         """
-        Optimize the allocation of values to train/val/test to match target proportions.
-        
+        Optimize the allocation of values to train/val/test using Integer Linear Programming (ILP).
+
         Args:
             value_counts (dict): Counts for each value
             target_train (float): Target count for training set
             target_val (float): Target count for validation set
             target_test (float): Target count for test set
-            
+
         Returns:
             dict: Mapping of values to 'train', 'val', or 'test'
         """
-        # Sort values by count (descending)
+        values = list(value_counts.keys())
+        counts = value_counts
+
+        # Create the LP problem
+        prob = pulp.LpProblem("DatasetSplitOptimization", pulp.LpMinimize)
+
+        # Decision variables: assignment of each value to one split
+        x_train = {val: pulp.LpVariable(f"x_train_{val}", cat="Binary") for val in values}
+        x_val = {val: pulp.LpVariable(f"x_val_{val}", cat="Binary") for val in values}
+        x_test = {val: pulp.LpVariable(f"x_test_{val}", cat="Binary") for val in values}
+
+        # Ensure each value is assigned to exactly one split
+        for val in values:
+            prob += x_train[val] + x_val[val] + x_test[val] == 1
+
+        # Total counts in each split
+        total_train = pulp.lpSum([x_train[val] * counts[val] for val in values])
+        total_val = pulp.lpSum([x_val[val] * counts[val] for val in values])
+        total_test = pulp.lpSum([x_test[val] * counts[val] for val in values])
+
+        # Add absolute deviation variables
+        dev_train = pulp.LpVariable("dev_train", lowBound=0)
+        dev_val = pulp.LpVariable("dev_val", lowBound=0)
+        dev_test = pulp.LpVariable("dev_test", lowBound=0)
+
+        # Deviation constraints (absolute value modeled with two inequalities)
+        prob += total_train - target_train <= dev_train
+        prob += target_train - total_train <= dev_train
+
+        prob += total_val - target_val <= dev_val
+        prob += target_val - total_val <= dev_val
+
+        prob += total_test - target_test <= dev_test
+        prob += target_test - total_test <= dev_test
+
+        # Objective: minimize sum of deviations
+        prob += dev_train + dev_val + dev_test
+
+        # Solve
+        status = prob.solve()
+        if pulp.LpStatus[status] != "Optimal":
+            print("Warning: ILP did not find an optimal solution. Falling back to greedy.")
+            return self._optimize_split_greedy(value_counts, target_train, target_val, target_test)
+
+        # Create allocation
+        allocation = {}
+        for val in values:
+            if pulp.value(x_train[val]) == 1:
+                allocation[val] = 'train'
+            elif pulp.value(x_val[val]) == 1:
+                allocation[val] = 'val'
+            elif pulp.value(x_test[val]) == 1:
+                allocation[val] = 'test'
+
+        return allocation
+
+    def _optimize_split_greedy(self, value_counts, target_train, target_val, target_test):
         sorted_values = sorted(value_counts.items(), key=lambda x: x[1], reverse=True)
-        
-        # Initialize allocation
         allocation = {}
         current_train = 0
         current_val = 0
         current_test = 0
-        
-        # First pass: allocate largest groups optimally
+
         for val, count in sorted_values:
-            # Calculate which split would bring us closest to the target
             train_diff = abs((current_train + count) / target_train - 1)
             val_diff = abs((current_val + count) / target_val - 1)
             test_diff = abs((current_test + count) / target_test - 1)
-            
-            # Assign to the split that minimizes the difference
+
             min_diff = min(train_diff, val_diff, test_diff)
-            
+
             if min_diff == train_diff:
                 allocation[val] = 'train'
                 current_train += count
@@ -426,15 +561,12 @@ class DatasetSplitter:
             else:
                 allocation[val] = 'test'
                 current_test += count
-        
-        # Optional: Second pass to further optimize if needed
-        # This could shuffle some allocations to get even closer to the targets
-        
+
         return allocation
     
     def export_splits(self):
         """
-        Export the dataset splits to the output directory.
+        Export the dataset splits to the output directory with desired structure.
         
         Returns:
             bool: True if successful
@@ -446,17 +578,15 @@ class DatasetSplitter:
         # Create output directory
         os.makedirs(self.output_path, exist_ok=True)
         
-        # Create subdirectories for each split
+        # Create split directories
         split_dirs = {
             'train': self.output_path / 'train',
             'val': self.output_path / 'valid',
             'test': self.output_path / 'test'
         }
         
-        for split_name, split_dir in split_dirs.items():
-            # Create images and labels directories
-            (split_dir / 'images').mkdir(parents=True, exist_ok=True)
-            (split_dir / 'labels').mkdir(parents=True, exist_ok=True)
+        for split_dir in split_dirs.values():
+            split_dir.mkdir(exist_ok=True)
         
         # Group files by original dataset
         datasets = self.file_info['original_dataset'].unique()
@@ -470,17 +600,18 @@ class DatasetSplitter:
                     split = row['split']
                     dataset_name = row['original_dataset']
                     
-                    # Create dataset subdirectory in split
-                    (split_dirs[split] / 'images' / dataset_name).mkdir(exist_ok=True)
-                    (split_dirs[split] / 'labels' / dataset_name).mkdir(exist_ok=True)
+                    # Create dataset & images subdirectory in split
+                    # Change the directory structure here:
+                    (split_dirs[split] / dataset_name / 'images').mkdir(parents=True, exist_ok=True)
+                    (split_dirs[split] / dataset_name / 'labels').mkdir(parents=True, exist_ok=True)
                     
                     # Source paths
                     src_img_path = row['image_path']
                     src_label_path = row['label_path']
                     
-                    # Destination paths
-                    dst_img_path = split_dirs[split] / 'images' / dataset_name / src_img_path.name
-                    dst_label_path = split_dirs[split] / 'labels' / dataset_name / (src_img_path.stem + '.txt')
+                    # Destination paths - update these paths:
+                    dst_img_path = split_dirs[split] / dataset_name / 'images' / src_img_path.name
+                    dst_label_path = split_dirs[split] / dataset_name / 'labels' / (src_img_path.stem + '.txt')
                     
                     # Copy image
                     future1 = executor.submit(shutil.copy2, src_img_path, dst_img_path)
@@ -506,7 +637,8 @@ class DatasetSplitter:
         }
         
         # Write the YAML file
-        yaml_path = self.output_path / 'data.yaml'
+        yaml_path = self.output_path / 'cgras_data.yaml'
+        self.new_yaml_path = yaml_path
         with open(yaml_path, 'w') as f:
             yaml.dump(yaml_data, f, default_flow_style=False, sort_keys=False)
             
@@ -528,7 +660,7 @@ class DatasetSplitter:
     
     def _get_split_paths(self, split, datasets):
         """
-        Generate the list of dataset paths for a specific split.
+        Generate the list of dataset paths for a specific split with the desired structure.
         
         Args:
             split (str): Split name ('train', 'val', or 'test')
@@ -538,7 +670,8 @@ class DatasetSplitter:
             list: List of dataset paths for the split
         """
         split_dir = 'valid' if split == 'val' else split
-        return [f"{split_dir}/images/{dataset}" for dataset in datasets]
+        # Change the path format here:
+        return [f"{split_dir}/{dataset}/images" for dataset in datasets]
 
 
 # Example usage

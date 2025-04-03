@@ -10,8 +10,8 @@ import torch
 
 from ultralytics import YOLO
 
-DATA_PATH = "/mnt/hpccs01/home/gonia/data"
-# DATA_PATH = "/media/java/RRAP03"
+# DATA_PATH = "/mnt/hpccs01/home/gonia/data"
+# DATA_PATH = "/media/java/RRAP03/data/outputs/data_pipleline/tiled/test2"
 
 # Training parameters
 MODEL_NAME = "best_2024.pt"
@@ -28,8 +28,10 @@ SAVE_PERIOD = 10
 PATIENCE = 25
 MASK_OVERLAP = False
 
-model_path = os.path.join(DATA_PATH, "models", MODEL_NAME)
-yaml_data_path = os.path.join(DATA_PATH, "train/cgras_data.yaml")
+# model_path = os.path.join(DATA_PATH, "models", MODEL_NAME)
+# yaml_data_path = os.path.join(DATA_PATH, "train/cgras_data.yaml")
+model_path = "/media/java/RRAP03/models/yolov8n-seg.pt"
+yaml_data_path = "/media/java/RRAP03/data/outputs/data_pipleline/tiled/test2/cgras_data.yaml"
 
 # Train the model
 print("\n Starting YOLOv8 Training...")

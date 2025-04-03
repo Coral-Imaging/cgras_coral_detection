@@ -34,6 +34,7 @@ class ImageFilterer:
         self.label_info = []  # Stores (pixel_area, norm_area, label_path, image_path, class_id, coords, img_width, img_height)
         self.label_count_per_dataset = {}
         self.max_workers = min(32, os.cpu_count() + 4)  # Default thread count
+        self.new_yaml_path = None
         
         # Load YAML data
         self._load_yaml()
@@ -45,33 +46,35 @@ class ImageFilterer:
             
         with open(self.yaml_path, 'r') as f:
             self.yaml_data = yaml.safe_load(f)
-            
+                
         # Validate YAML has required fields
         if 'names' not in self.yaml_data:
             raise ValueError("Missing 'names' field in YAML file")
-            
+                
         # Determine base directory (where the YAML file is located)
         self.base_dir = self.yaml_path.parent
-        
-        # Find data paths (could be under 'data', 'train', 'val', 'test', etc.)
+            
+        # Find data paths from all potential sources
         self.data_paths = []
         
-        if 'data' in self.yaml_data and isinstance(self.yaml_data['data'], list):
-            self.data_paths.extend(self.yaml_data['data'])
-        elif 'data' in self.yaml_data and isinstance(self.yaml_data['data'], dict):
-            # If data is a dictionary, extract paths
-            for dataset_name, dataset_info in self.yaml_data['data'].items():
-                if 'images' in dataset_info:
-                    self.data_paths.append(dataset_info['images'])
-        
-        # Check for train/val/test paths
-        for key in ['train', 'val', 'test']:
-            if key in self.yaml_data and isinstance(self.yaml_data[key], list):
-                self.data_paths.extend(self.yaml_data[key])
-                
+        # Check all possible dataset path fields: 'data', 'train', 'val', 'test'
+        for key in ['data', 'train', 'val', 'test']:
+            if key in self.yaml_data:
+                # List of paths
+                if isinstance(self.yaml_data[key], list):
+                    self.data_paths.extend(self.yaml_data[key])
+                # Single string path
+                elif isinstance(self.yaml_data[key], str):
+                    self.data_paths.append(self.yaml_data[key])
+                # Dictionary with paths
+                elif isinstance(self.yaml_data[key], dict):
+                    for dataset_name, dataset_info in self.yaml_data[key].items():
+                        if isinstance(dataset_info, dict) and 'images' in dataset_info:
+                            self.data_paths.append(dataset_info['images'])
+                    
         if not self.data_paths:
             raise ValueError("No dataset paths found in YAML file")
-            
+                
         print(f"Found {len(self.data_paths)} dataset paths in the YAML file")
     
     def _load_filtered_data(self):
@@ -84,6 +87,7 @@ class ImageFilterer:
             return False
             
         filtered_yaml_path = self.output_path / "cgras_data.yaml"
+        self.new_yaml_path = filtered_yaml_path
         if not filtered_yaml_path.exists():
             print("Warning: No filtered data found at", filtered_yaml_path)
             return False
@@ -115,8 +119,6 @@ class ImageFilterer:
         except Exception as e:
             print(f"Error loading filtered data: {str(e)}")
             return False
-
-
 
     def _calculate_polygon_area(self, points):
         """
@@ -319,7 +321,13 @@ class ImageFilterer:
                 print(f"No image files found in {full_path}")
                 continue
                 
-            dataset_name = data_path.split('/')[-3] if '/' in data_path else data_path  # Get dataset name from path
+            if '/' in data_path:
+                parts = data_path.split('/')
+                # Get the first component that isn't 'images'
+                dataset_name = next((part for part in reversed(parts) if part != 'images'), parts[0])
+            else:
+                dataset_name = data_path  # Get dataset name from path
+                
             dataset_areas = []
             
             print(f"Analyzing {len(image_files)} images in {dataset_name}...")
@@ -734,6 +742,7 @@ class ImageFilterer:
         
         if incremental:
             filtered_yaml_path = self.output_path / "cgras_data.yaml"
+            self.new_yaml_path = filtered_yaml_path
             if filtered_yaml_path.exists():
                 print(f"Building upon previous filtered results from {filtered_yaml_path}")
                 # Load the previous filtered data as our source
@@ -819,18 +828,26 @@ class ImageFilterer:
         
         # Create a copy of the source YAML for the filtered dataset
         filtered_yaml = source_yaml_data.copy()
-        
-        # Adjust paths in the new YAML
-        if 'data' in filtered_yaml and isinstance(filtered_yaml['data'], list):
-            filtered_yaml['data'] = [p for p in filtered_yaml['data']]  # Keep same paths, they'll be relative
-            
-        elif 'data' in filtered_yaml and isinstance(filtered_yaml['data'], dict):
-            # Keep the same structure but paths will be relative to new location
-            pass
-            
+
+        # Preserve all dataset path structures in the filtered YAML
+        for key in ['data', 'train', 'val', 'test']:
+            if key in filtered_yaml:
+                # List of paths
+                if isinstance(filtered_yaml[key], list):
+                    # Keep the same paths but in the new location
+                    filtered_yaml[key] = [p for p in filtered_yaml[key]]
+                # Single string path
+                elif isinstance(filtered_yaml[key], str):
+                    # Keep the same path
+                    filtered_yaml[key] = filtered_yaml[key]
+                # Dictionary structure
+                elif isinstance(filtered_yaml[key], dict):
+                    # Keep the same structure but paths will be relative to new location
+                    pass
+
         # Set the new 'path' field to the output path
         filtered_yaml['path'] = str(self.output_path.absolute())
-        
+
         # Statistics
         stats = {
             'total_images_processed': 0,
@@ -1069,6 +1086,7 @@ class ImageFilterer:
         # Write the filtered YAML file
         with open(self.output_path / "cgras_data.yaml", 'w') as f:
             yaml.dump(filtered_yaml, f, default_flow_style=False, sort_keys=False)
+            self.new_yaml_path = self.output_path / "cgras_data.yaml"
             
         # Print overall summary
         print(f"\nFiltering complete:")
