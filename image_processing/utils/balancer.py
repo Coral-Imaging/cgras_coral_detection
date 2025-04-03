@@ -417,9 +417,7 @@ class DatasetBalancer:
         ax.set_xlabel('Datasets')
         
         # Create custom legend with one entry per actually plotted split
-        # Create custom legend with one entry per actually plotted split
         custom_legend = []
-        for split in plotted_splits:
         for split in plotted_splits:
             if split in split_positions and len(split_positions[split]) > 0:
                 # Use the stored bar and color information
@@ -716,36 +714,36 @@ class DatasetBalancer:
             yaml.dump(balanced_yaml, f, default_flow_style=False, sort_keys=False)
 
 
-    if __name__ == "__main__":
-        import argparse
+if __name__ == "__main__":
+    import argparse
         
-        parser = argparse.ArgumentParser(description="Balance YOLO datasets by equalizing empty and non-empty labels")
-        parser.add_argument("yaml_path", help="Path to the YOLO data YAML file")
-        parser.add_argument("--output", help="Path where balanced data should be saved")
-        parser.add_argument("--analyze", action="store_true", help="Only analyze label balance without creating balanced dataset")
-        parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
-        parser.add_argument("--threads", type=int, help="Number of worker threads")
-        parser.add_argument("--no-prompt", action="store_true", help="Skip confirmation prompt before balancing")
+    parser = argparse.ArgumentParser(description="Balance YOLO datasets by equalizing empty and non-empty labels")
+    parser.add_argument("yaml_path", help="Path to the YOLO data YAML file")
+    parser.add_argument("--output", help="Path where balanced data should be saved")
+    parser.add_argument("--analyze", action="store_true", help="Only analyze label balance without creating balanced dataset")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
+    parser.add_argument("--threads", type=int, help="Number of worker threads")
+    parser.add_argument("--no-prompt", action="store_true", help="Skip confirmation prompt before balancing")
         
-        args = parser.parse_args()
+    args = parser.parse_args()
         
-        balancer = DatasetBalancer(args.yaml_path, args.output, args.threads)
+    balancer = DatasetBalancer(args.yaml_path, args.output, args.threads)
         
-        if args.analyze:
-            balancer.analyze_dataset_balance()
-            balancer.plot_dataset_balance()
-        else:
-            print("Analyzing dataset balance...")
-            balancer.analyze_dataset_balance()
-            balancer.plot_dataset_balance()
+    if args.analyze:
+        balancer.analyze_dataset_balance()
+        balancer.plot_dataset_balance()
+    else:
+        print("Analyzing dataset balance...")
+        balancer.analyze_dataset_balance()
+        balancer.plot_dataset_balance()
             
-            proceed = True
-            if not args.no_prompt:
-                print("\nProceed with balancing using these settings? (y/n)")
-                user_input = input()
-                proceed = user_input.lower() == 'y'
+        proceed = True
+        if not args.no_prompt:
+            print("\nProceed with balancing using these settings? (y/n)")
+            user_input = input()
+            proceed = user_input.lower() == 'y'
                 
-            if proceed:
-                balancer.balance_datasets(random_seed=args.seed)
-            else:
-                print("Balancing canceled.")
+        if proceed:
+            balancer.balance_datasets(random_seed=args.seed)
+        else:
+            print("Balancing canceled.")

@@ -24,4 +24,6 @@ dependencies:
   - opencv>=4.6
   - ultralytics
   - sahi
+  - pulp
+  - tqdm
   # - supervison

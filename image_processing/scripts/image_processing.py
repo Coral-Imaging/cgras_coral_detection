@@ -8,6 +8,8 @@ import logging
 import argparse
 from pathlib import Path
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Import processing modules
 try:
     from utils.folder_structurer import FolderStructurer
