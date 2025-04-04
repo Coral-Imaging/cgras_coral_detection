@@ -366,10 +366,6 @@ class FolderStructurer:
             print("Run validate_input() first or use ignore_validation=True to force conversion.")
             return False
         
-        # Create the output directory structure
-        datasets_dir = self.output_path / "datasets"
-        os.makedirs(datasets_dir, exist_ok=True)
-        
         # Initialize variables to store class names and dataset paths
         class_idx_to_name = {}  # Preserve the class index to name mapping
         highest_idx = -1        # Track the highest class index
@@ -426,19 +422,17 @@ class FolderStructurer:
             except Exception as e:
                 print(f"Error analyzing classes in {dataset_name}: {str(e)}")
         
+
+        # Create global output directories just once
+        output_images_dir = self.output_path / "data" / "images"
+        output_labels_dir = self.output_path / "data" / "labels"
+        os.makedirs(output_images_dir, exist_ok=True)
+        os.makedirs(output_labels_dir, exist_ok=True)
+
         # Second pass: actual dataset conversion
         for dataset_folder in dataset_pbar:
             dataset_name = dataset_folder.name
             dataset_pbar.set_description(f"Processing dataset: {dataset_name}")
-            
-            # Create output dataset structure
-            output_dataset_dir = datasets_dir / dataset_name
-            output_data_dir = output_dataset_dir / "data"
-            output_images_dir = output_data_dir / "images"
-            output_labels_dir = output_data_dir / "labels"
-            
-            os.makedirs(output_images_dir, exist_ok=True)
-            os.makedirs(output_labels_dir, exist_ok=True)
             
             # Get file paths and setup
             try:
@@ -522,15 +516,10 @@ class FolderStructurer:
                 stats_msg += f" (Missing: {missing_images} images, {missing_labels} labels)"
             tqdm.write(stats_msg)
         
-        # Create the combined YAML file with preserved class indices
-        image_paths = []
-        for dataset_name in dataset_paths:
-            image_paths.append(f"datasets/{dataset_name}/data/images")
-        
         cgras_yaml = {
             'names': class_idx_to_name,  # Use the preserved class mapping
             'path': str(self.output_path.absolute()),
-            'data': image_paths
+            'data': ['data/images']
         }
         
         # Write the combined YAML file

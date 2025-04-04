@@ -276,8 +276,42 @@ class DatasetSplitter:
         if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
             raise ValueError("Split ratios must sum to 1.0")
 
-        if split_field not in self.file_info.columns:
-            raise ValueError(f"Invalid split field: {split_field}")
+        if split_field is None:
+            print("No split_field provided. Previewing random image-level split.")
+
+            shuffled = self.file_info.sample(frac=1, random_state=random_seed).reset_index(drop=True)
+            total = len(shuffled)
+            train_end = int(train_ratio * total)
+            val_end = train_end + int(val_ratio * total)
+
+            split_assignment = pd.Series(index=shuffled.index, dtype=object)
+            split_assignment.iloc[:train_end] = 'train'
+            split_assignment.iloc[train_end:val_end] = 'val'
+            split_assignment.iloc[val_end:] = 'test'
+
+            split_counts = split_assignment.value_counts().to_dict()
+
+            # Plot 1: Actual split counts
+            plt.figure(figsize=(8, 4))
+            plt.bar(split_counts.keys(), split_counts.values())
+            plt.title("Proposed Random Split Counts")
+            plt.ylabel("Number of Items")
+            plt.tight_layout()
+            plt.show()
+
+            # Plot 2: Difference from target
+            actual_ratios = {k: v / total for k, v in split_counts.items()}
+            target_ratios = {'train': train_ratio, 'val': val_ratio, 'test': test_ratio}
+            diff = {k: abs(actual_ratios.get(k, 0) - target_ratios[k]) for k in target_ratios}
+
+            plt.figure(figsize=(8, 4))
+            plt.bar(diff.keys(), diff.values())
+            plt.title("Absolute Deviation from Target Ratios")
+            plt.ylabel("Deviation")
+            plt.tight_layout()
+            plt.show()
+
+            return split_assignment.to_dict()
 
         random.seed(random_seed)
         np.random.seed(random_seed)
@@ -335,7 +369,7 @@ class DatasetSplitter:
 
         return assignments
 
-    def create_splits(self, split_field='tile', train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, 
+    def create_splits(self, split_field=None, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, 
                      stratify_by=None, random_seed=42):
         """
         Create train/validation/test splits based on a specific field.
@@ -359,12 +393,33 @@ class DatasetSplitter:
         if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
             raise ValueError(f"Split ratios must sum to 1.0: {train_ratio} + {val_ratio} + {test_ratio} = {train_ratio + val_ratio + test_ratio}")
             
-        if split_field not in self.file_info.columns:
-            valid_fields = [col for col in self.file_info.columns if col not in 
-                           ['filename', 'image_path', 'label_path', 'has_label']]
-            print(f"Invalid split_field '{split_field}'. Valid fields are: {', '.join(valid_fields)}")
-            return None
+        if split_field is None:
+            print("No split_field provided. Performing random image-level split.")
+
+            # Shuffle file_info
+            self.file_info = self.file_info.sample(frac=1, random_state=random_seed).reset_index(drop=True)
+
+            # Compute split indices
+            total = len(self.file_info)
+            train_end = int(train_ratio * total)
+            val_end = train_end + int(val_ratio * total)
+
+            self.file_info.loc[:train_end, 'split'] = 'train'
+            self.file_info.loc[train_end:val_end, 'split'] = 'val'
+            self.file_info.loc[val_end:, 'split'] = 'test'
+
+            # Count and print results
+            train_count = (self.file_info['split'] == 'train').sum()
+            val_count = (self.file_info['split'] == 'val').sum()
+            test_count = (self.file_info['split'] == 'test').sum()
+
+            print(f"\nFinal Random Split Counts:")
+            print(f"  - Train: {train_count} ({train_count/total:.1%})")
+            print(f"  - Validation: {val_count} ({val_count/total:.1%})")
+            print(f"  - Test: {test_count} ({test_count/total:.1%})")
             
+            return None  # No value-to-split mapping needed for random
+
         # Get all unique values for the split field
         unique_values = self.file_info[split_field].unique()
         
@@ -601,17 +656,18 @@ class DatasetSplitter:
                     dataset_name = row['original_dataset']
                     
                     # Create dataset & images subdirectory in split
-                    # Change the directory structure here:
-                    (split_dirs[split] / dataset_name / 'images').mkdir(parents=True, exist_ok=True)
-                    (split_dirs[split] / dataset_name / 'labels').mkdir(parents=True, exist_ok=True)
+                    (split_dirs[split] / 'images').mkdir(parents=True, exist_ok=True)
+                    (split_dirs[split] / 'labels').mkdir(parents=True, exist_ok=True)
+
                     
                     # Source paths
                     src_img_path = row['image_path']
                     src_label_path = row['label_path']
                     
                     # Destination paths - update these paths:
-                    dst_img_path = split_dirs[split] / dataset_name / 'images' / src_img_path.name
-                    dst_label_path = split_dirs[split] / dataset_name / 'labels' / (src_img_path.stem + '.txt')
+                    dst_img_path = split_dirs[split] / 'images' / src_img_path.name
+                    dst_label_path = split_dirs[split] / 'labels' / (src_img_path.stem + '.txt')
+
                     
                     # Copy image
                     future1 = executor.submit(shutil.copy2, src_img_path, dst_img_path)
@@ -630,10 +686,10 @@ class DatasetSplitter:
         # Create YAML file with the new split structure
         yaml_data = {
             'path': str(self.output_path.absolute()),
-            'train': self._get_split_paths('train', datasets),
-            'val': self._get_split_paths('val', datasets),
-            'test': self._get_split_paths('test', datasets),
-            'names': self.yaml_data['names']  # Copy class names from original YAML
+            'train': ['train/images'],
+            'val': ['valid/images'],
+            'test': ['test/images'],
+            'names': self.yaml_data['names']
         }
         
         # Write the YAML file

@@ -11,15 +11,11 @@ from pathlib import Path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import processing modules
-try:
-    from utils.folder_structurer import FolderStructurer
-    from utils.filterer import ImageFilterer
-    from utils.data_splitter import DatasetSplitter
-    from utils.image_patcher import ImagePatcher
-    from utils.balancer import DatasetBalancer
-except ImportError:
-    print("Error: Required modules not found. Make sure the utils directory is in your PYTHONPATH.")
-    sys.exit(1)
+from utils.folder_structurer import FolderStructurer
+from utils.filterer import ImageFilterer
+from utils.data_splitter import DatasetSplitter
+from utils.image_patcher import ImagePatcher
+from utils.balancer import DatasetBalancer
 
 def setup_logging(log_level=logging.INFO):
     """Set up logging configuration."""

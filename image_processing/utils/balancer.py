@@ -623,16 +623,12 @@ class DatasetBalancer:
                                 dataset_dir = Path(data_path).name
                             
                             # Get relative path of the image from its dataset base directory
-                            rel_img_path = img_path.relative_to(full_path)
+                            rel_img_path = img_path.relative_to(full_path.parent)
                             
-                            # Preserve the dataset directory structure in the output path
-                            # Create dataset_dir/images structure in output
-                            dst_path = self.output_path / dataset_dir
-                            dst_img_path = dst_path / rel_img_path
-                            
-                            # Get the corresponding label path
-                            dst_label_dir = str(dst_img_path.parent).replace('images', 'labels')
-                            dst_label_path = Path(dst_label_dir) / f"{dst_img_path.stem}.txt"
+                            # Construct destination image and label paths
+                            dst_img_path = self.output_path / rel_img_path
+                            dst_label_path = dst_img_path.with_name(f"{dst_img_path.stem}.txt").as_posix().replace('/images/', '/labels/')
+                            dst_label_path = Path(dst_label_path)
                             
                             # Create directory structure
                             os.makedirs(dst_img_path.parent, exist_ok=True)

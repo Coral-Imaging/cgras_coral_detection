@@ -332,7 +332,7 @@ class ImagePatcher:
             print(f"Error loading checkpoint: {e}")
             return {}
 
-    def process_all_datasets(self, resume=False, batch_size=10, memory_limit=None):
+    def process_all_datasets(self, resume=False, batch_size=100, memory_limit=None):
         """
         Process all datasets from the YAML file with memory optimization
         
@@ -415,7 +415,11 @@ class ImagePatcher:
                 batch_count += 1
                 if batch_count >= batch_size:
                     batch_count = 0
-                    gc.collect()  # Force garbage collection
+                    # Only collect garbage if memory usage is high
+                    mem_info = psutil.Process(os.getpid()).memory_info()
+                    memory_gb = mem_info.rss / (1024 ** 3)
+                    if memory_gb > memory_limit * 0.8:  # 80% of limit
+                        gc.collect()  # Force garbage collection
             
             print(f"Completed dataset '{dataset_name}': processed {processed_count} images, created {total_tiles} tiles")
             
