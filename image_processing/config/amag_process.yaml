@@ -1,8 +1,8 @@
 # CGRAS Data Processing Pipeline Configuration
 
 # Project details
-project_name: "amag30"  # Name of the project
-input_path: "/media/java/RRAP03/data/exported_from_cvat/amag30"  # Absolute path to the input data from CVAT
+project_name: "amag_process"  # Name of the project
+input_path: "/media/java/RRAP03/data/exported_from_cvat/amag130"  # Absolute path to the input data from CVAT
 output_base_path: "/media/java/RRAP03/data/outputs/data_pipleline"  # Base output directory
 
 # Pipeline steps to run (in order)
@@ -25,7 +25,7 @@ filter:
 
 split:
   enabled: true
-  split_field: null  # Field to split by (e.g., tile, week). Null (None) for split randomly based on the ratio
+  split_field: null  # Field to split by (e.g., tile, week)
   train_ratio: 0.7
   val_ratio: 0.15
   test_ratio: 0.15

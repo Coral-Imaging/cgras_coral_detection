@@ -2,8 +2,8 @@
 
 # Project details
 project_name: "amag100"  # Name of the project
-input_path: "/mnt/hpccs01/home/gonia/data/exported_from_cvat/amag100"  # Absolute path to the input data from CVAT
-output_base_path: "/mnt/hpccs01/home/gonia/data/outputs/data_pipleline"  # Base output directory
+input_path: "/media/java/RRAP03/data/exported_from_cvat/amag100"  # Absolute path to the input data from CVAT
+output_base_path: "/media/java/RRAP03/data/outputs/data_pipleline"  # Base output directory
 
 # Pipeline steps to run (in order)
 pipeline:

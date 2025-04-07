@@ -616,19 +616,16 @@ class DatasetBalancer:
                             data_path = self.dataset_stats[dataset_name]['path']
                             full_path = self.base_dir / data_path
                             
-                            # Extract the dataset directory name
-                            # This is the key fix - preserve the dataset directory structure
-                            dataset_dir = Path(data_path).parent
-                            if str(dataset_dir) == '.':  # Handle root paths
-                                dataset_dir = Path(data_path).name
+                            # Extract the relative path of the image within its dataset directory
+                            rel_path_from_dataset = img_path.relative_to(full_path)
                             
-                            # Get relative path of the image from its dataset base directory
-                            rel_img_path = img_path.relative_to(full_path.parent)
+                            # Construct destination paths preserving the original structure
+                            # Include the split and dataset in the path
+                            dst_img_path = self.output_path / data_path / rel_path_from_dataset
                             
-                            # Construct destination image and label paths
-                            dst_img_path = self.output_path / rel_img_path
-                            dst_label_path = dst_img_path.with_name(f"{dst_img_path.stem}.txt").as_posix().replace('/images/', '/labels/')
-                            dst_label_path = Path(dst_label_path)
+                            # For label path, replace 'images' with 'labels' in the path if it exists
+                            dst_label_dir = dst_img_path.parent.as_posix().replace('/images', '/labels')
+                            dst_label_path = Path(dst_label_dir) / f"{dst_img_path.stem}.txt"
                             
                             # Create directory structure
                             os.makedirs(dst_img_path.parent, exist_ok=True)
@@ -699,11 +696,7 @@ class DatasetBalancer:
         # Update the 'path' field
         balanced_yaml['path'] = str(self.output_path.absolute())
         
-        # Keep the same paths for dataset references
-        # We're preserving the directory structure, so the relative paths stay the same
-        
         # Write the YAML file
-        yaml_path = self.output_path / "cgras_data.yaml"
         yaml_path = self.output_path / "cgras_data.yaml"
         self.new_yaml_path = yaml_path
         with open(yaml_path, 'w') as f:
