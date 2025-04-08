@@ -231,7 +231,6 @@ class ImageFilterer:
             Path: Path to the corresponding label file
         """
         # Convert image path to label path
-        # Usually by replacing 'images' with 'labels' and changing extension to .txt
         parent_dir = image_path.parent
         
         if 'images' in str(parent_dir):

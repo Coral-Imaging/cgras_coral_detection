@@ -370,7 +370,7 @@ class DatasetSplitter:
         return assignments
 
     def create_splits(self, split_field=None, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, 
-                     stratify_by=None, random_seed=42):
+                        stratify_by=None, random_seed=42):
         """
         Create train/validation/test splits based on a specific field.
         
@@ -393,140 +393,179 @@ class DatasetSplitter:
         if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
             raise ValueError(f"Split ratios must sum to 1.0: {train_ratio} + {val_ratio} + {test_ratio} = {train_ratio + val_ratio + test_ratio}")
             
-        if split_field is None:
-            print("No split_field provided. Performing random image-level split.")
-
-            # Shuffle file_info
-            self.file_info = self.file_info.sample(frac=1, random_state=random_seed).reset_index(drop=True)
-
-            # Compute split indices
-            total = len(self.file_info)
-            train_end = int(train_ratio * total)
-            val_end = train_end + int(val_ratio * total)
-
-            self.file_info.loc[:train_end, 'split'] = 'train'
-            self.file_info.loc[train_end:val_end, 'split'] = 'val'
-            self.file_info.loc[val_end:, 'split'] = 'test'
-
-            # Count and print results
-            train_count = (self.file_info['split'] == 'train').sum()
-            val_count = (self.file_info['split'] == 'val').sum()
-            test_count = (self.file_info['split'] == 'test').sum()
-
-            print(f"\nFinal Random Split Counts:")
-            print(f"  - Train: {train_count} ({train_count/total:.1%})")
-            print(f"  - Validation: {val_count} ({val_count/total:.1%})")
-            print(f"  - Test: {test_count} ({test_count/total:.1%})")
-            
-            return None  # No value-to-split mapping needed for random
-
-        # Get all unique values for the split field
-        unique_values = self.file_info[split_field].unique()
-        
         # Set random seed for reproducibility
         random.seed(random_seed)
         np.random.seed(random_seed)
         
-        # Initialize split assignments
-        split_assignments = {}
-        
-        if stratify_by is not None and stratify_by != split_field:
-            # Create stratified splits
-            print(f"Creating stratified splits using {split_field}, stratified by {stratify_by}")
-            
-            # Group by stratify field
-            groups = self.file_info.groupby(stratify_by)
-            
-            for group_name, group_df in groups:
-                # Get unique split values for this group
-                group_values = group_df[split_field].unique()
-                
-                # Calculate counts for each split value
-                value_counts = {}
-                for val in group_values:
-                    value_counts[val] = len(group_df[group_df[split_field] == val])
-                
-                # Calculate total items in this group
-                total_count = sum(value_counts.values())
-                
-                # Calculate target counts for each split within this group
-                target_train = total_count * train_ratio
-                target_val = total_count * val_ratio
-                target_test = total_count * test_ratio
-                
-                # Optimize the allocation to hit these targets
-                split_result = self._optimize_split(
-                    value_counts, target_train, target_val, target_test
-                )
-                
-                # Update the overall split assignments
-                for val, split in split_result.items():
-                    split_assignments[val] = split
-                    
-                # Print the result for this group
-                train_actual = sum(value_counts[v] for v, s in split_result.items() if s == 'train')
-                val_actual = sum(value_counts[v] for v, s in split_result.items() if s == 'val')
-                test_actual = sum(value_counts[v] for v, s in split_result.items() if s == 'test')
-                
-                print(f"Group {stratify_by}={group_name}:")
-                print(f"  - Target:  train={target_train:.1f}, val={target_val:.1f}, test={target_test:.1f}")
-                print(f"  - Actual:  train={train_actual} ({train_actual/total_count:.1%}), "
-                     f"val={val_actual} ({val_actual/total_count:.1%}), "
-                     f"test={test_actual} ({test_actual/total_count:.1%})")
-        else:
-            # Create non-stratified splits
-            print(f"Creating non-stratified splits using {split_field}")
-            
-            # Calculate counts for each split value
-            value_counts = {}
-            for val in unique_values:
-                value_counts[val] = len(self.file_info[self.file_info[split_field] == val])
-                
-            # Calculate total items
-            total_count = sum(value_counts.values())
-            
-            # Calculate target counts
-            target_train = total_count * train_ratio
-            target_val = total_count * val_ratio
-            target_test = total_count * test_ratio
-            
-            # Optimize the allocation to hit these targets
-            split_assignments = self._optimize_split(
-                value_counts, target_train, target_val, target_test
-            )
-            
-            # Print the results
-            train_actual = sum(value_counts[v] for v, s in split_assignments.items() if s == 'train')
-            val_actual = sum(value_counts[v] for v, s in split_assignments.items() if s == 'val')
-            test_actual = sum(value_counts[v] for v, s in split_assignments.items() if s == 'test')
-            
-            print("Overall split:")
-            print(f"  - Target:  train={target_train:.1f} ({train_ratio:.1%}), "
-                 f"val={target_val:.1f} ({val_ratio:.1%}), "
-                 f"test={target_test:.1f} ({test_ratio:.1%})")
-            print(f"  - Actual:  train={train_actual} ({train_actual/total_count:.1%}), "
-                 f"val={val_actual} ({val_actual/total_count:.1%}), "
-                 f"test={test_actual} ({test_actual/total_count:.1%})")
-        
-        # Assign a split to each file
-        self.file_info['split'] = self.file_info[split_field].map(split_assignments)
-        
-        # Print counts per split
-        train_count = (self.file_info['split'] == 'train').sum()
-        val_count = (self.file_info['split'] == 'val').sum()
-        test_count = (self.file_info['split'] == 'test').sum()
         total = len(self.file_info)
         
-        print(f"\nFinal Split Counts:")
-        print(f"  - Train: {train_count} ({train_count/total:.1%})")
-        print(f"  - Validation: {val_count} ({val_count/total:.1%})")
-        print(f"  - Test: {test_count} ({test_count/total:.1%})")
+        # Initialize the split column with empty values
+        self.file_info['split'] = np.nan
         
-        return split_assignments
-    
+        # Special handling for very small datasets (less than 3 images)
+        if total < 3:
+            print(f"Warning: Very small dataset with only {total} images.")
+            
+            if total == 1:
+                # With just 1 image, put it in training
+                self.file_info['split'] = 'train'
+                print("Only one image available - assigning to training set.")
+            elif total == 2:
+                # With 2 images, put one in training and one in validation
+                self.file_info.iloc[0, self.file_info.columns.get_loc('split')] = 'train'
+                self.file_info.iloc[1, self.file_info.columns.get_loc('split')] = 'val'
+                print("Only two images available - assigning one to training and one to validation.")
+        elif total == 3:
+            # With exactly 3 images, put one in each split
+            self.file_info.iloc[0, self.file_info.columns.get_loc('split')] = 'train'
+            self.file_info.iloc[1, self.file_info.columns.get_loc('split')] = 'val'
+            self.file_info.iloc[2, self.file_info.columns.get_loc('split')] = 'test'
+            print("Exactly three images available - assigning one to each split.")
+        else:
+            # For larger datasets, use either field-based splitting or random splitting
+            if split_field is None:
+                print("No split_field provided. Performing random image-level split with guaranteed representation.")
+                
+                # Shuffle file_info
+                self.file_info = self.file_info.sample(frac=1, random_state=random_seed).reset_index(drop=True)
+                
+                # Always ensure at least one image in each split
+                self.file_info.iloc[0, self.file_info.columns.get_loc('split')] = 'train'
+                self.file_info.iloc[1, self.file_info.columns.get_loc('split')] = 'val'
+                self.file_info.iloc[2, self.file_info.columns.get_loc('split')] = 'test'
+                
+                # For remaining images, prioritize filling train, then val, then test
+                remaining = total - 3
+                
+                # Calculate remaining counts based on the target ratios
+                # Normalize the ratios to sum to 1
+                ratio_sum = train_ratio + val_ratio + test_ratio
+                train_norm = train_ratio / ratio_sum
+                val_norm = val_ratio / ratio_sum
+                test_norm = test_ratio / ratio_sum
+                
+                # Calculate how many images should go in each split from the remaining
+                # Prioritize train > val > test when dealing with rounding
+                train_remaining = int(remaining * train_norm)
+                val_remaining = int(remaining * val_norm)
+                test_remaining = remaining - train_remaining - val_remaining
+                
+                # Assign remaining images accordingly
+                if train_remaining > 0:
+                    self.file_info.iloc[3:3+train_remaining, self.file_info.columns.get_loc('split')] = 'train'
+                
+                if val_remaining > 0:
+                    self.file_info.iloc[3+train_remaining:3+train_remaining+val_remaining, self.file_info.columns.get_loc('split')] = 'val'
+                
+                if test_remaining > 0:
+                    self.file_info.iloc[3+train_remaining+val_remaining:, self.file_info.columns.get_loc('split')] = 'test'
+            else:
+                # Regular field-based splitting
+                # Get all unique values for the split field
+                unique_values = self.file_info[split_field].unique()
+                
+                # Initialize split assignments
+                split_assignments = {}
+                
+                if stratify_by is not None and stratify_by != split_field:
+                    # Create stratified splits
+                    print(f"Creating stratified splits using {split_field}, stratified by {stratify_by}")
+                    
+                    # Group by stratify field
+                    groups = self.file_info.groupby(stratify_by)
+                    
+                    for group_name, group_df in groups:
+                        # Get unique split values for this group
+                        group_values = group_df[split_field].unique()
+                        
+                        # Calculate counts for each split value
+                        value_counts = {}
+                        for val in group_values:
+                            value_counts[val] = len(group_df[group_df[split_field] == val])
+                        
+                        # Calculate total items in this group
+                        total_count = sum(value_counts.values())
+                        
+                        # Calculate target counts for each split within this group
+                        target_train = total_count * train_ratio
+                        target_val = total_count * val_ratio
+                        target_test = total_count * test_ratio
+                        
+                        # Optimize the allocation to hit these targets
+                        split_result = self._optimize_split(
+                            value_counts, target_train, target_val, target_test
+                        )
+                        
+                        # Update the overall split assignments
+                        for val, split in split_result.items():
+                            split_assignments[val] = split
+                            
+                        # Print the result for this group
+                        train_actual = sum(value_counts[v] for v, s in split_result.items() if s == 'train')
+                        val_actual = sum(value_counts[v] for v, s in split_result.items() if s == 'val')
+                        test_actual = sum(value_counts[v] for v, s in split_result.items() if s == 'test')
+                        
+                        print(f"Group {stratify_by}={group_name}:")
+                        print(f"  - Target:  train={target_train:.1f}, val={target_val:.1f}, test={target_test:.1f}")
+                        print(f"  - Actual:  train={train_actual} ({train_actual/total_count:.1%}), "
+                            f"val={val_actual} ({val_actual/total_count:.1%}), "
+                            f"test={test_actual} ({test_actual/total_count:.1%})")
+                else:
+                    # Create non-stratified splits
+                    print(f"Creating non-stratified splits using {split_field}")
+                    
+                    # Calculate counts for each split value
+                    value_counts = {}
+                    for val in unique_values:
+                        value_counts[val] = len(self.file_info[self.file_info[split_field] == val])
+                        
+                    # Calculate total items
+                    total_count = sum(value_counts.values())
+                    
+                    # Calculate target counts
+                    target_train = total_count * train_ratio
+                    target_val = total_count * val_ratio
+                    target_test = total_count * test_ratio
+                    
+                    # Optimize the allocation to hit these targets
+                    split_assignments = self._optimize_split(
+                        value_counts, target_train, target_val, target_test
+                    )
+                    
+                    # Print the results
+                    train_actual = sum(value_counts[v] for v, s in split_assignments.items() if s == 'train')
+                    val_actual = sum(value_counts[v] for v, s in split_assignments.items() if s == 'val')
+                    test_actual = sum(value_counts[v] for v, s in split_assignments.items() if s == 'test')
+                    
+                    print("Overall split:")
+                    print(f"  - Target:  train={target_train:.1f} ({train_ratio:.1%}), "
+                        f"val={target_val:.1f} ({val_ratio:.1%}), "
+                        f"test={target_test:.1f} ({test_ratio:.1%})")
+                    print(f"  - Actual:  train={train_actual} ({train_actual/total_count:.1%}), "
+                        f"val={val_actual} ({val_actual/total_count:.1%}), "
+                        f"test={test_actual} ({test_actual/total_count:.1%})")
+                
+                # Assign a split to each file based on split_field
+                self.file_info['split'] = self.file_info[split_field].map(split_assignments)
+        
+            # Print counts per split
+            train_count = (self.file_info['split'] == 'train').sum()
+            val_count = (self.file_info['split'] == 'val').sum()
+            test_count = (self.file_info['split'] == 'test').sum()
+            total = len(self.file_info)
+            
+            print(f"\nFinal Split Counts:")
+            print(f"  - Train: {train_count} ({train_count/total:.1%})")
+            print(f"  - Validation: {val_count} ({val_count/total:.1%})")
+            print(f"  - Test: {test_count} ({test_count/total:.1%})")
+            
+            return None if split_field is None else split_assignments
+
+
     def _optimize_split(self, value_counts, target_train, target_val, target_test):
         """
         Optimize the allocation of values to train/val/test using Integer Linear Programming (ILP).
+        For small datasets, ensures each split has at least one sample with priority to train > val > test.
 
         Args:
             value_counts (dict): Counts for each value
@@ -539,8 +578,40 @@ class DatasetSplitter:
         """
         values = list(value_counts.keys())
         counts = value_counts
+        total_samples = sum(counts.values())
+        
+        print(f"Total samples: {total_samples}, Unique values: {len(values)}")
+        
+        # Special handling for very small datasets
+        if len(values) < 3:
+            allocation = {}
+            # Sort by sample count in descending order
+            sorted_values = sorted(value_counts.items(), key=lambda x: x[1], reverse=True)
+            
+            # If only 1 or 2 values, prioritize train > val > test
+            if len(values) == 1:
+                allocation[values[0]] = 'train'
+                print(f"Warning: Only one value ({values[0]}) available. Assigning to training set only.")
+                return allocation
+            elif len(values) == 2:
+                # Assign the one with more samples to train, the other to val
+                allocation[sorted_values[0][0]] = 'train'
+                allocation[sorted_values[1][0]] = 'val'
+                print(f"Warning: Only two values available. No test set will be created.")
+                return allocation
+        
+        # Handle case where we have exactly 3 values
+        if len(values) == 3:
+            allocation = {}
+            # Simply assign one to each split, prioritizing by sample count
+            sorted_values = sorted(value_counts.items(), key=lambda x: x[1], reverse=True)
+            allocation[sorted_values[0][0]] = 'train'
+            allocation[sorted_values[1][0]] = 'val'
+            allocation[sorted_values[2][0]] = 'test'
+            print("Exactly 3 values available. Assigned one to each split, prioritizing by sample count.")
+            return allocation
 
-        # Create the LP problem
+        # Standard ILP optimization for larger datasets
         prob = pulp.LpProblem("DatasetSplitOptimization", pulp.LpMinimize)
 
         # Decision variables: assignment of each value to one split
@@ -571,9 +642,22 @@ class DatasetSplitter:
 
         prob += total_test - target_test <= dev_test
         prob += target_test - total_test <= dev_test
+        
+        # Ensure at least one sample in each split if we have enough values
+        if len(values) >= 3:
+            prob += total_train >= 1
+            prob += total_val >= 1
+            prob += total_test >= 1
 
-        # Objective: minimize sum of deviations
-        prob += dev_train + dev_val + dev_test
+        # Objective: minimize sum of deviations with weighted priorities (train > val > test)
+        # We use weights to prioritize filling train first, then val, then test
+        # Note that since we're minimizing deviations, a larger weight means higher priority
+        # to minimize that deviation (i.e., to get closer to the target)
+        train_weight = 3  # Highest priority
+        val_weight = 2    # Medium priority
+        test_weight = 1   # Lowest priority
+        
+        prob += train_weight * dev_train + val_weight * dev_val + test_weight * dev_test
 
         # Solve
         status = prob.solve()
@@ -591,19 +675,87 @@ class DatasetSplitter:
             elif pulp.value(x_test[val]) == 1:
                 allocation[val] = 'test'
 
+        # Verify that each split has at least one sample if we have enough values
+        if len(values) >= 3:
+            # Get counts for each split
+            train_actual = sum(counts[v] for v, s in allocation.items() if s == 'train')
+            val_actual = sum(counts[v] for v, s in allocation.items() if s == 'val')
+            test_actual = sum(counts[v] for v, s in allocation.items() if s == 'test')
+            
+            # Check if any split is empty
+            if train_actual == 0 or val_actual == 0 or test_actual == 0:
+                print("Warning: ILP solution resulted in an empty split. Falling back to greedy with strict constraints.")
+                return self._optimize_split_greedy_with_constraints(value_counts, target_train, target_val, target_test)
+
         return allocation
 
     def _optimize_split_greedy(self, value_counts, target_train, target_val, target_test):
+        """
+        Greedy allocation with priority to fill train, then val, then test.
+        
+        Args:
+            value_counts (dict): Counts for each value
+            target_train (float): Target count for training set
+            target_val (float): Target count for validation set
+            target_test (float): Target count for test set
+            
+        Returns:
+            dict: Mapping of values to 'train', 'val', or 'test'
+        """
         sorted_values = sorted(value_counts.items(), key=lambda x: x[1], reverse=True)
         allocation = {}
         current_train = 0
         current_val = 0
         current_test = 0
+        
+        # Special handling for very small datasets
+        if len(sorted_values) < 3:
+            if len(sorted_values) == 1:
+                allocation[sorted_values[0][0]] = 'train'
+                print(f"Warning: Only one value available. Assigning to training set only.")
+                return allocation
+            elif len(sorted_values) == 2:
+                # Assign the one with more samples to train, the other to val
+                allocation[sorted_values[0][0]] = 'train'
+                allocation[sorted_values[1][0]] = 'val'
+                print(f"Warning: Only two values available. No test set will be created.")
+                return allocation
+        
+        # Handle case where we have exactly 3 values
+        if len(sorted_values) == 3:
+            allocation[sorted_values[0][0]] = 'train'
+            allocation[sorted_values[1][0]] = 'val'
+            allocation[sorted_values[2][0]] = 'test'
+            print("Exactly 3 values available. Assigned one to each split, prioritizing by sample count.")
+            return allocation
+        
+        # Make sure we have at least one sample in each split
+        if len(sorted_values) >= 3:
+            # First, allocate at least one value to each split, prioritizing by count
+            allocation[sorted_values[0][0]] = 'train'
+            current_train += sorted_values[0][1]
+            
+            allocation[sorted_values[1][0]] = 'val'
+            current_val += sorted_values[1][1]
+            
+            allocation[sorted_values[2][0]] = 'test'
+            current_test += sorted_values[2][1]
+            
+            # Skip the first 3 in the loop below
+            sorted_values = sorted_values[3:]
 
+        # For remaining values, use the standard greedy approach with priority weighting
         for val, count in sorted_values:
-            train_diff = abs((current_train + count) / target_train - 1)
-            val_diff = abs((current_val + count) / target_val - 1)
-            test_diff = abs((current_test + count) / target_test - 1)
+            # Apply weights to prioritize train > val > test
+            # Lower weighted difference means higher priority
+            train_weight = 0.8  # Priority to fill train first
+            val_weight = 0.9    # Second priority
+            test_weight = 1.0   # Lowest priority
+            
+            # Calculate weighted differences from target
+            train_diff = train_weight * abs((current_train + count) / max(1, target_train) - 1)
+            val_diff = val_weight * abs((current_val + count) / max(1, target_val) - 1)
+            test_diff = test_weight * abs((current_test + count) / max(1, target_test) - 1)
 
             min_diff = min(train_diff, val_diff, test_diff)
 
@@ -617,6 +769,62 @@ class DatasetSplitter:
                 allocation[val] = 'test'
                 current_test += count
 
+        return allocation
+
+    def _optimize_split_greedy_with_constraints(self, value_counts, target_train, target_val, target_test):
+        """
+        Enhanced greedy algorithm that guarantees at least one sample in each split.
+        
+        Args:
+            value_counts (dict): Counts for each value
+            target_train (float): Target count for training set
+            target_val (float): Target count for validation set
+            target_test (float): Target count for test set
+            
+        Returns:
+            dict: Mapping of values to 'train', 'val', or 'test'
+        """
+        sorted_values = sorted(value_counts.items(), key=lambda x: x[1], reverse=True)
+        allocation = {}
+        
+        # First, ensure each split has at least one value
+        if len(sorted_values) >= 3:
+            allocation[sorted_values[0][0]] = 'train'
+            allocation[sorted_values[1][0]] = 'val'
+            allocation[sorted_values[2][0]] = 'test'
+            
+            current_train = sorted_values[0][1]
+            current_val = sorted_values[1][1]
+            current_test = sorted_values[2][1]
+            
+            # Process the remaining values
+            for i in range(3, len(sorted_values)):
+                val, count = sorted_values[i]
+                
+                # Apply weights to prioritize train > val > test
+                train_weight = 0.8  # Priority to fill train first
+                val_weight = 0.9    # Second priority
+                test_weight = 1.0   # Lowest priority
+                
+                train_diff = train_weight * abs((current_train + count) / max(1, target_train) - 1)
+                val_diff = val_weight * abs((current_val + count) / max(1, target_val) - 1)
+                test_diff = test_weight * abs((current_test + count) / max(1, target_test) - 1)
+                
+                min_diff = min(train_diff, val_diff, test_diff)
+                
+                if min_diff == train_diff:
+                    allocation[val] = 'train'
+                    current_train += count
+                elif min_diff == val_diff:
+                    allocation[val] = 'val'
+                    current_val += count
+                else:
+                    allocation[val] = 'test'
+                    current_test += count
+        else:
+            # For very small datasets, use the standard method
+            return self._optimize_split_greedy(value_counts, target_train, target_val, target_test)
+        
         return allocation
     
     def export_splits(self):
