@@ -12,7 +12,7 @@ import cv2 as cv
 import glob
 import re
 import math
-from annotation.Utils import poly_2_rle
+from analysis.Utils import poly_2_rle
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element, SubElement, ElementTree
 import zipfile

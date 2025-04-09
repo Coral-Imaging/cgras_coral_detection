@@ -9,7 +9,7 @@ from datetime import datetime
 import pandas as pd
 
 # Import from your existing module
-from NegDataimages import Detector, ImageProcessor, DatasetAnalyzer, Prediction
+from analysis.NegDataimages import Detector, ImageProcessor, DatasetAnalyzer, Prediction
 from Utils import classes, class_colours
 
 

@@ -4,7 +4,7 @@
 Visualise the predition results using a trained yolov8 weights file
     Works for both masks and bounding boxes, as well as options for SAHI
 """
-
+#TODO: Rewrite this script to be class based
 from ultralytics import YOLO
 import os
 import glob

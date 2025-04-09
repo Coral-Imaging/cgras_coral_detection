@@ -1,5 +1,6 @@
 #! /usr/bin/env/python3
-
+#TODO conver this to classes and config files
+#
 """
 Functions and varibles used for annotation and convertion to and from CVAT annotation style 
 As well as helper functions for viewing predictions and robowflow sahi.
