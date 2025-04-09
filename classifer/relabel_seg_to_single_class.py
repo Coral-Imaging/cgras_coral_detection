@@ -64,11 +64,18 @@ def change_class_to_zero(label_dir, output_dir, classes, DeadClasses = [6,7]):
             if len(parts) >= 5:  #  class ID and bounding box/polygon data
                 if parts[0].isdigit() and int(parts[0]) in classes: #If Alive
                     parts[0] = "0" 
+            if len(parts) >= 5:  #  class ID and bounding box/polygon data
+                if parts[0].isdigit() and int(parts[0]) in classes: #If Alive
+                    parts[0] = "0" 
                     updated_lines.append(" ".join(parts))
                 elif parts[0].isdigit() and int(parts[0]) in DeadClasses: #If Dead
                     print("Found class dead " + parts[0])
                     parts[0] = "1"  
+                elif parts[0].isdigit() and int(parts[0]) in DeadClasses: #If Dead
+                    print("Found class dead " + parts[0])
+                    parts[0] = "1"  
                     updated_lines.append(" ".join(parts))
+                else: #Any that isn't coral
                 else: #Any that isn't coral
                     print(f"Skipping line with class ID not in {classes}: {parts[0]}")
             else:

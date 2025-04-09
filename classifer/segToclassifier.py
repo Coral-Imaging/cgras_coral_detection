@@ -143,6 +143,9 @@ def process_labels_and_images(label_dir, image_dir, output_dir, output_json_path
     # Remove small images
     remove_small_images(output_dir)
 
+    # Remove small images
+    remove_small_images(output_dir)
+
     print(f"Processing complete. Cropped images saved in: {output_dir}")
     print(f"JSON file saved at: {output_json_path}")
 
