@@ -1,5 +1,5 @@
 #! /usr/bin/env/python3
-#TODO conver this to classes and config files
+#TODO convert this to classes and config files
 #
 """
 Functions and varibles used for annotation and convertion to and from CVAT annotation style 
