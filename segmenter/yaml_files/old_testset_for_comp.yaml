@@ -9,21 +9,19 @@
 
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
 # path: /home/dorian/Data/cgras_datasets/cgras_dataset_20230421/
-path: /mnt/hpccs01/home/wardlewo/Data/cgras/classifier/classifer_split
-
+path: /mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels
 train: 
- - train
+ - train_0/labels/images/
+ - train_1/labels/images/
+ - train_2/labels/images/
+ - train_3/labels/images/
+ - train_4/labels/images/
+ 
 val:   # val images (relative to 'path') 
- - val
+ - valid_0/labels/images
 test:  # test images (optional)
- - test
+ - test_0/labels/images/
 # Classes
 names:
-  0: recruit_live_white
-  1: recruit_cluster_live_white
-  2: recruit_symbiotic
-  3: recruit_cluster_symbiotic
-  4: recruit_partial
-  5: recruit_cluster_partial
-  6: recruit_dead
-  7: recruit_cluster_dead
+  0: coral_alive
+  1: coral_dead

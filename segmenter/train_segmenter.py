@@ -7,12 +7,12 @@ train basic yolov8 model for image segmentation
 from ultralytics import YOLO
 import torch
 
-data_file = '/mnt/hpccs01/home/wardlewo/Data/cgras/seg_test/2_class_alive_dead_corals/2240605_cgras/cgras_classifier.yaml'
+data_file = '/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/Reduced_dataset_patches/cgras_2023+2024_dataset_seg_20250326.yaml'
 #data_file = sys.argv[1]
 
 # load model
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-model = YOLO("yolov8x-seg.pt")
+model = YOLO("yolov8n-seg.pt")
 #model = YOLO("/home/java/Java/cslics/resolution_test_results/models/resolution_test_640/weights/Cslic_640_best.pt")
 model.info()
 
@@ -22,11 +22,12 @@ model.info()
 # classes arg is lightweight and simply ignore classes that are not included in the classes list, 
 # during train, val and predict, it has no effect on model architecture.
 model.train(data=data_file, 
-            device      = [0,1],            
-            epochs      = 500, 
-            batch       = 16,  
-            project     = "cgras_segmentation_alive+dead_coral",
-            workers     = 4,
+            device      = [0,1,2,3],       #For HPC, set to 0 or delete otherwise      
+            epochs      = 750, 
+            batch       = 128,  
+            project     = "runs/20250326_cgras_seg_2023-2024_dataset",
+            name        = "20250326_8n_train_multiGpu_B128",
+            workers     = 8,
             patience    = 50,
             pretrained  = False,
             save        = True,

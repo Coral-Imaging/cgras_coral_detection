@@ -5,8 +5,7 @@ import cv2
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 
-classes = ["Alive", "Dead", "recruit_symbiotic", "recruit_cluster_symbiotic", "recruit_partial",
-           "recruit_cluster_partial", "recruit_dead", "recruit_cluster_dead", "grazer_snail", "pest_tubeworm", "unknown"] 
+classes = ["Alive", "Dead"] 
 
 
 def process_label_file(label_file, image_dir, output_dir, ignore_classes, classes, output_data):
@@ -139,9 +138,6 @@ def process_labels_and_images(label_dir, image_dir, output_dir, output_json_path
     # Save the JSON file
     with open(output_json_path, "w") as json_file:
         json.dump(output_data, json_file, indent=4)
-
-    # Remove small images
-    remove_small_images(output_dir)
 
     # Remove small images
     remove_small_images(output_dir)

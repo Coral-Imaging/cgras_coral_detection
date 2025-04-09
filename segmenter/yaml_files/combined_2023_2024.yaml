@@ -1,0 +1,19 @@
+path: /mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/dataset_2023_built_from_testSet_122/2024_model
+
+train: 
+ - train_0/labels/images/
+ - train_1/labels/images/
+ - amag_0/labels/images/
+ - amag_1/labels/images/
+val:   # val images (relative to 'path') 
+ - valid_0/labels/images
+ - amag_valid/images
+test:  # test images (optional)
+ - test_0/labels/images/
+ - amag_test/images
+# Classes
+names:
+  0: a
+  1: b
+  2: coral_alive
+  3: coral_dead
