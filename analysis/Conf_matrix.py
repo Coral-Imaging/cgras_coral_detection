@@ -3,14 +3,15 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import confusion_matrix
 import torch
+from torchmetrics.classification import ConfusionMatrix
 from datetime import datetime
 import pandas as pd
+import yaml
+import argparse
 
 # Import from your existing module
 from analysis.NegDataimages import Detector, ImageProcessor, DatasetAnalyzer, Prediction
-from Utils import classes, class_colours
 
 
 class ConfusionMatrixAnalyzer:
@@ -233,7 +234,7 @@ class ConfusionMatrixAnalyzer:
             return 0
         
     def build_confusion_matrix(self):
-        """Build confusion matrix from collected labels."""
+        """Build confusion matrix from collected labels using PyTorch."""
         if not self.true_labels or not self.pred_labels:
             print("No labels collected. Run process_dataset first.")
             return None
@@ -273,17 +274,37 @@ class ConfusionMatrixAnalyzer:
         
         print(f"Classes present in the data: {[self.class_names[c] if c < len(self.class_names) else 'Background' for c in class_indices]}")
         
-        # Create confusion matrix with all labels including background
-        cm = confusion_matrix(
-            self.true_labels, 
-            self.pred_labels, 
-            labels=class_indices
-        )
+        # Create confusion matrix with PyTorch
+        # Convert lists to PyTorch tensors
+        true_tensor = torch.tensor(self.true_labels)
+        pred_tensor = torch.tensor(self.pred_labels)
+        
+        # Find the total number of classes (including background)
+        num_classes = max(class_indices) + 1
+        
+        # Initialize the PyTorch confusion matrix
+        confmat = ConfusionMatrix(task="multiclass", num_classes=num_classes)
+        
+        # Compute the confusion matrix
+        cm = confmat(pred_tensor, true_tensor)
+        
+        # Extract the relevant part of the confusion matrix for our active classes
+        # Create indices mapping for slicing
+        idx_mapping = {cls: i for i, cls in enumerate(class_indices)}
+        cm_subset = torch.zeros((len(class_indices), len(class_indices)), dtype=torch.int64)
+        
+        for i, true_cls in enumerate(class_indices):
+            for j, pred_cls in enumerate(class_indices):
+                if true_cls < cm.shape[0] and pred_cls < cm.shape[1]:
+                    cm_subset[i, j] = cm[true_cls, pred_cls]
+        
+        # Convert to numpy for compatibility with plotting functions
+        cm_np = cm_subset.cpu().numpy()
         
         # Save complete label information for metrics calculation
         self.label_pairs = list(zip(self.true_labels, self.pred_labels))
         
-        return cm, class_indices
+        return cm_np, class_indices
     
     def plot_confusion_matrix(self, output_dir, normalize=True):
         """Plot and save confusion matrix."""
@@ -589,18 +610,55 @@ class ConfusionMatrixAnalyzer:
         return metrics
 
 
+def load_config(config_path):
+    """Load YAML configuration file"""
+    with open(config_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
+
 def main():
-    # Configuration
-    test_img_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/images'
-    test_label_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/labels'
-    model_weights = "/mnt/hpccs01/home/wardlewo/20250205_cgras_segmentation_alive_dead/train7/weights/best.pt"
-    output_dir = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/confusion_matrix_results'
-    max_images = 6000  # Set max number of images to process
-    min_area = 0.01  # Minimum area as fraction of image size (0.1%)
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='Confusion Matrix Analysis')
+    parser.add_argument('--config', type=str, default='/home/wardlewo/Reggie/corals/cgras_settler_counter/configs/confusion_matrix_config.yaml',
+                        help='Path to the configuration file')
+    args = parser.parse_args()
     
-    # We don't need to check for shapely since it should be handled by ImageProcessor
+    # Load configuration
+    config = load_config(args.config)
+    
+    # Extract configuration values
+    test_img_folder = config['dataset']['test_img_folder']
+    test_label_folder = config['dataset']['test_label_folder']
+    model_weights = config['model']['model_weights']
+    output_dir = config['output']['output_dir']
+    max_images = config['parameters']['max_images']
+    min_area = config['parameters']['min_area']
+    plot_normalized = config['visualization']['plot_normalized']
+    plot_raw = config['visualization']['plot_raw']
+    
+    # Get classes and class colors from config instead of Utils
+    classes = config.get('classes', ["alive_coral", "dead_coral"])
+    
+    # Create the class_colours dictionary from config colors
+    class_colours = {}
+    if 'colors' in config and 'class_colours' in config['colors']:
+        class_colours = config['colors']['class_colours']
+    else:
+        # Fallback to default colors if not specified in config
+        default_colors = {
+            'blue': [0, 212, 255],
+            'green': [0, 255, 0]
+        }
+        for i, class_name in enumerate(classes):
+            if i == 0:
+                class_colours[class_name] = default_colors['blue']
+            elif i == 1:
+                class_colours[class_name] = default_colors['green']
     
     print("Starting Confusion Matrix Analysis")
+    print(f"Using config from: {args.config}")
+    print(f"Classes: {classes}")
+    print(f"Class colors: {class_colours}")
     
     # Initialize classes
     detector = Detector(model_weights)
@@ -624,8 +682,11 @@ def main():
     cm_analyzer.process_dataset(img_list, label_list, min_area)
     
     # Create and plot confusion matrix
-    cm_analyzer.plot_confusion_matrix(output_dir, normalize=True)
-    cm_analyzer.plot_confusion_matrix(output_dir, normalize=False)
+    if plot_normalized:
+        cm_analyzer.plot_confusion_matrix(output_dir, normalize=True)
+    
+    if plot_raw:
+        cm_analyzer.plot_confusion_matrix(output_dir, normalize=False)
 
     print(f"Results saved to {output_dir}")
 
