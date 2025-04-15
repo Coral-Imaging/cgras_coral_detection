@@ -234,7 +234,7 @@ def main():
     # Configuration
     test_img_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/images'
     test_label_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/labels'
-    model_weights = "/mnt/hpccs01/home/wardlewo/20250205_cgras_segmentation_alive_dead/train7/weights/best.pt"
+    model_weights = '/mnt/hpccs01/home/wardlewo/ultralytics_output/runs/20250326_cgras_segmentation_2022-2023_dataset_alive_dead/20250326_8n_train_multiGpu_B512_best/weights/best.pt'
     output_base_dir = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/test_FN_FP'
     percentage = 0.15  # Editable percentage of images to move
     

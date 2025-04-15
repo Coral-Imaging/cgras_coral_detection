@@ -2,16 +2,17 @@
 
 # Dataset paths
 dataset:
-  test_img_folder: '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/images'
-  test_label_folder: '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/labels'
+  test_img_folder: '/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/dataset_2023_built_from_testSet_122/test_0/labels/images'
+  test_label_folder: '/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/dataset_2023_built_from_testSet_122/test_0/labels/labels'
+
 
 # Model configuration
 model:
-  model_weights: '/mnt/hpccs01/home/wardlewo/runs/20250326_cgras_segmentation_2022-2023_dataset_alive_dead/20250326_8n_train_multiGpu_B512_best/weights/best.pt'
+  model_weights: '/mnt/hpccs01/home/wardlewo/ultralytics_output/runs/20250326_cgras_segmentation_2022-2023_dataset_alive_dead/20250326_8n_train_multiGpu_B512_best/weights/best.pt'
 
 # Output configuration
 output:
-  output_dir: '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/confusion_matrix_results'
+  output_dir: '/mnt/hpccs01/home/wardlewo/Data/confusion_matrix_results'
 
 # Analysis parameters
 parameters:
@@ -41,4 +42,18 @@ colors:
   dark_purple: [128, 0, 128]
   light_grey: [192, 192, 192]
   dark_green: [0, 100, 0]
+  
+  # Explicit class color mapping
+  class_colours:
+    alive_coral: [0, 212, 255]  # blue
+    dead_coral: [0, 255, 0]     # green
+
+# Additional evaluation metrics to calculate
+metrics:
+  calculate_iou: true           # Calculate Intersection over Union
+  calculate_dice: true          # Calculate Dice coefficient (F1 for segmentation)
+  calculate_mAP: false          # Calculate mean Average Precision (requires confidence scores)
+  normalize_methods: ["row", "column", "all"]  # Different normalization methods for visualization
+  binary_metrics: true          # Calculate binary metrics treating each class as positive vs rest
+  show_text_matrix: true        # Show text-based matrix in console output
 

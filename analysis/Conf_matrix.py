@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
+import torchvision
 from torchmetrics.classification import ConfusionMatrix
 from datetime import datetime
 import pandas as pd
@@ -11,11 +12,11 @@ import yaml
 import argparse
 
 # Import from your existing module
-from analysis.NegDataimages import Detector, ImageProcessor, DatasetAnalyzer, Prediction
+from NegDataimages import Detector, ImageProcessor, DatasetAnalyzer, Prediction
 
 
 class ConfusionMatrixAnalyzer:
-    def __init__(self, detector, dataset_analyzer, class_names):
+    def __init__(self, detector, dataset_analyzer, class_names, class_colours):
         self.detector = detector
         self.dataset_analyzer = dataset_analyzer
         self.class_names = class_names
@@ -27,7 +28,7 @@ class ConfusionMatrixAnalyzer:
         # Add background class index as last class index + 1
         self.background_idx = len(class_names)
         
-    def process_dataset(self, img_list, label_list, min_area=0.01):
+    def process_dataset(self, img_list, label_list, min_area=0.001):
         """
         Process all images in the test set and collect true and predicted labels.
         Include background class for false positives/negatives.
@@ -35,8 +36,9 @@ class ConfusionMatrixAnalyzer:
         Args:
             img_list: List of paths to images
             label_list: List of paths to label files
-            min_area: Minimum area threshold as fraction of image (default: 0.01 or 1%)
+            min_area: Minimum area threshold as fraction of image (default: 0.001 or 0.1%)
         """
+        count = 0
         for img_path, label_path in zip(img_list, label_list):
             try:
                 # Get prediction from model
@@ -60,12 +62,13 @@ class ConfusionMatrixAnalyzer:
                         # Iterate through each mask in the current result
                         for i, mask_data in enumerate(r.masks.xyn):
                             class_label = int(r.boxes.cls[i].item())
-                            
+
                             # Calculate polygon area
                             area = self._calculate_polygon_area(mask_data.flatten())
                             
                             # Only include if area is above threshold
                             if area >= min_area:
+                                count += 1
                                 pred_classes.append(class_label)
                                 pred_masks.append(mask_data.flatten())
                             else:
@@ -107,42 +110,47 @@ class ConfusionMatrixAnalyzer:
                     matched_gt = set()
                     matched_pred = set()
                     
-                    # For each ground truth, find the best matching prediction
+                    # Create matching matrix with IoU scores
+                    matching_scores = []
+                    
+                    # For each ground truth, calculate IoU with each prediction of the same class
                     for i, true_class in enumerate(true_classes):
-                        best_match_idx = -1
-                        best_match_score = 0
-                        
-                        # Find predictions of the same class
                         for j, pred_class in enumerate(pred_classes):
-                            if j in matched_pred:
-                                continue  # Skip already matched predictions
+                            if pred_class != true_class:
+                                continue  # Skip different classes
+                                
+                            iou_score = 0
+                            # If masks are available, calculate IOU
+                            if i < len(true_masks) and j < len(pred_masks) and pred_masks[j] is not None:
+                                iou_score = self.img_processor.calculate_iou(true_masks[i], pred_masks[j])
+                            elif pred_class == true_class:  
+                                # Without masks, just use class matching
+                                iou_score = 1.0
+                                
+                            if iou_score > 0:  # Only store positive matches
+                                matching_scores.append((i, j, iou_score))
+                                
+                    # Sort all matches by IoU score (descending)
+                    matching_scores.sort(key=lambda x: x[2], reverse=True)
+                    
+                    # Greedily match ground truth to predictions - highest IoU scores first
+                    for gt_idx, pred_idx, score in matching_scores:
+                        if gt_idx in matched_gt or pred_idx in matched_pred:
+                            continue  # Skip if either is already matched
                             
-                            if pred_class == true_class:
-                                # If masks are available, calculate IOU
-                                if i < len(true_masks) and j < len(pred_masks) and pred_masks[j] is not None:
-                                    # Use the IOU calculation from the ImageProcessor
-                                    iou = self.img_processor.calculate_iou(true_masks[i], pred_masks[j])
-                                    if iou > best_match_score:
-                                        best_match_score = iou
-                                        best_match_idx = j
-                                else:
-                                    # Without masks, just match by class
-                                    best_match_idx = j
-                                    best_match_score = 1.0
-                                    break
+                        # Add the match
+                        self.true_labels.append(true_classes[gt_idx])
+                        self.pred_labels.append(pred_classes[pred_idx])
+                        matched_gt.add(gt_idx)
+                        matched_pred.add(pred_idx)
                         
-                        # If a good match is found
-                        if best_match_idx >= 0:
-                            self.true_labels.append(true_class)
-                            self.pred_labels.append(pred_classes[best_match_idx])
-                            matched_gt.add(i)
-                            matched_pred.add(best_match_idx)
-                        else:
-                            # No matching prediction found - false negative
+                    # Add unmatched ground truths as false negatives
+                    for i, true_class in enumerate(true_classes):
+                        if i not in matched_gt:
                             self.true_labels.append(true_class)
                             self.pred_labels.append(self.background_idx)  # Background class
                     
-                    # Add remaining predictions as false positives
+                    # Add unmatched predictions as false positives
                     for j, pred_class in enumerate(pred_classes):
                         if j not in matched_pred:
                             self.true_labels.append(self.background_idx)  # Background class
@@ -160,7 +168,7 @@ class ConfusionMatrixAnalyzer:
             except Exception as e:
                 print(f"Error processing {os.path.basename(img_path)}: {e}")
                 self.skipped_images += 1
-        
+        print(f"Count of processed masks: {count}")
         print(f"Dataset processing complete. Processed {self.processed_images} images, skipped {self.skipped_images}")
         print(f"Total labels: {len(self.true_labels)} true, {len(self.pred_labels)} predicted")
         assert len(self.true_labels) == len(self.pred_labels), "Mismatch in number of labels!"
@@ -264,6 +272,9 @@ class ConfusionMatrixAnalyzer:
         print(f"  False negatives: {false_neg}")
         print(f"  True negatives: {true_neg}")
         
+        # Add detailed class distribution analysis
+        self._analyze_class_distribution()
+        
         # Get only the classes that actually appear in the data (excluding background)
         unique_true_classes = set(t for t in self.true_labels if t != self.background_idx)
         unique_pred_classes = set(p for p in self.pred_labels if p != self.background_idx)
@@ -298,18 +309,82 @@ class ConfusionMatrixAnalyzer:
                 if true_cls < cm.shape[0] and pred_cls < cm.shape[1]:
                     cm_subset[i, j] = cm[true_cls, pred_cls]
         
-        # Convert to numpy for compatibility with plotting functions
-        cm_np = cm_subset.cpu().numpy()
-        
         # Save complete label information for metrics calculation
         self.label_pairs = list(zip(self.true_labels, self.pred_labels))
         
-        return cm_np, class_indices
+        return cm_subset, class_indices
     
-    def plot_confusion_matrix(self, output_dir, normalize=True):
-        """Plot and save confusion matrix."""
-        cm, class_indices = self.build_confusion_matrix()
-        if cm is None:
+    def _analyze_class_distribution(self):
+        """Provide a detailed analysis of class distribution in the dataset."""
+        if not self.true_labels or not self.pred_labels:
+            return
+            
+        # Count occurrences of each class in true and predicted labels
+        true_counts = {}
+        pred_counts = {}
+        
+        # Create counts for each class
+        for i in range(len(self.class_names) + 1):  # +1 for background
+            if i < len(self.class_names):
+                class_name = self.class_names[i]
+            else:
+                class_name = "Background"
+                
+            true_counts[class_name] = sum(1 for t in self.true_labels if t == i)
+            pred_counts[class_name] = sum(1 for p in self.pred_labels if p == i)
+        
+        print("\nDetailed class distribution:")
+        print("  Class         | True labels | Predicted |")
+        print("  ------------- | ----------- | --------- |")
+        for i in range(len(self.class_names) + 1):
+            if i < len(self.class_names):
+                class_name = self.class_names[i]
+            else:
+                class_name = "Background"
+                
+            print(f"  {class_name:<13} | {true_counts[class_name]:<11} | {pred_counts[class_name]:<9} |")
+                
+        # Create a text-based mini confusion matrix for quick reference
+        print("\nSimplified confusion matrix:")
+        
+        # Print header
+        header = "True \\ Pred |"
+        for i in range(len(self.class_names)):
+            header += f" {self.class_names[i][:8]} |"
+        header += " Bkgnd |"
+        print(header)
+        
+        divider = "------------ |"
+        for i in range(len(self.class_names) + 1):
+            divider += " ------ |"
+        print(divider)
+        
+        # Print rows
+        for i in range(len(self.class_names) + 1):
+            if i < len(self.class_names):
+                row_name = self.class_names[i][:8]
+            else:
+                row_name = "Background"
+                
+            row = f"{row_name:<12} |"
+            
+            for j in range(len(self.class_names) + 1):
+                count = sum(1 for t, p in zip(self.true_labels, self.pred_labels) if t == i and p == j)
+                row += f" {count:6} |"
+                
+            print(row)
+        print()
+
+    def plot_confusion_matrix(self, output_dir, normalize="row"):
+        """
+        Plot and save confusion matrix using PyTorch.
+        
+        Args:
+            output_dir: Directory to save output files
+            normalize: Normalization method - one of ["row", "column", "all", None]
+        """
+        cm_tensor, class_indices = self.build_confusion_matrix()
+        if cm_tensor is None:
             print("Cannot generate confusion matrix. No valid class pairs found.")
             self._save_summary_metrics(output_dir)
             return
@@ -326,34 +401,90 @@ class ConfusionMatrixAnalyzer:
                 display_names.append("Background")
         
         # Normalize if requested
-        if normalize and cm.sum(axis=1).any():
-            with np.errstate(divide='ignore', invalid='ignore'):
-                cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-                cm_norm = np.nan_to_num(cm_norm, nan=0)
-            cm_display = np.round(cm_norm, 2)
-            title = "Normalized Confusion Matrix"
-            fmt = ".2f"
-        else:
-            cm_display = cm
-            title = "Confusion Matrix"
-            fmt = "d"
+        cm_display = cm_tensor
+        title = "Confusion Matrix"
+        if normalize:
+            with torch.no_grad():
+                if normalize == "row" and torch.sum(cm_tensor, dim=1).any():
+                    # Row normalization (normalize by true labels)
+                    row_sums = torch.sum(cm_tensor, dim=1, keepdim=True)
+                    # Replace zeros with ones to avoid division by zero
+                    row_sums[row_sums == 0] = 1
+                    cm_display = cm_tensor.float() / row_sums.float()
+                    title = "Row-Normalized Confusion Matrix"
+                    
+                elif normalize == "column" and torch.sum(cm_tensor, dim=0).any():
+                    # Column normalization (normalize by predicted labels)
+                    col_sums = torch.sum(cm_tensor, dim=0, keepdim=True)
+                    # Replace zeros with ones to avoid division by zero
+                    col_sums[col_sums == 0] = 1
+                    cm_display = cm_tensor.float() / col_sums.float()
+                    title = "Column-Normalized Confusion Matrix"
+                    
+                elif normalize == "all" and torch.sum(cm_tensor).item() > 0:
+                    # Total normalization (normalize by total count)
+                    total = torch.sum(cm_tensor)
+                    cm_display = cm_tensor.float() / total.float()
+                    title = "Total-Normalized Confusion Matrix"
             
-        # Create figure
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(cm_display, annot=True, fmt=fmt, 
-                    cmap="Blues", xticklabels=display_names, 
-                    yticklabels=display_names)
-        plt.title(title)
-        plt.ylabel('True Label')
-        plt.xlabel('Predicted Label')
-        plt.tight_layout()
+        # Convert to numpy for matplotlib plotting
+        cm_np = cm_display.cpu().numpy()
+        
+        # Dynamic figure size based on number of classes to reduce whitespace
+        n_classes = len(display_names)
+        
+        # Calculate more compact figure dimensions with better aspect ratio
+        fig_width = max(5, min(n_classes * 1.0, 10))
+        fig_height = max(4, min(n_classes * 0.8, 8))
+        
+        # Create figure with specified size
+        plt.figure(figsize=(fig_width, fig_height))
+        
+        # Set colormap and format based on normalization
+        cmap = plt.cm.Blues
+        if normalize:
+            plt.imshow(cm_np, interpolation='nearest', cmap=cmap, vmin=0, vmax=1, aspect='auto')
+            fmt = '.2f'
+        else:
+            plt.imshow(cm_np, interpolation='nearest', cmap=cmap, aspect='auto')
+            fmt = 'd'
+            
+        plt.title(title, fontsize=14, pad=10)
+        
+        # Add smaller colorbar with reduced size to decrease whitespace
+        cbar = plt.colorbar(fraction=0.035, pad=0.03)
+        cbar.ax.tick_params(labelsize=9)
+        
+        # Add class ticks with adjusted spacing
+        tick_marks = np.arange(len(display_names))
+        fontsize = max(7, min(9, 10 - n_classes // 4))  # Smaller font for more classes
+        
+        # Reduce space for tick labels
+        plt.xticks(tick_marks, display_names, rotation=45, ha='right', fontsize=fontsize)
+        plt.yticks(tick_marks, display_names, fontsize=fontsize)
+        
+        # Add text annotations with tighter spacing
+        thresh = (cm_np.max() + cm_np.min()) / 2.0
+        for i in range(cm_np.shape[0]):
+            for j in range(cm_np.shape[1]):
+                plt.text(j, i, format(cm_np[i, j], fmt),
+                        ha="center", va="center",
+                        fontsize=fontsize,
+                        color="white" if cm_np[i, j] > thresh else "black")
+        
+        # Use tighter layout with less padding
+        plt.tight_layout(pad=0.5)
+        plt.ylabel('True Label', fontsize=12)
+        plt.xlabel('Predicted Label', fontsize=12)
+        
+        # Save with normalization type in filename
+        norm_str = normalize if normalize else "raw"
+        os.makedirs(output_dir, exist_ok=True)
+        plt.savefig(os.path.join(output_dir, f"confusion_matrix_{norm_str}_{date_str}.png"),
+                   dpi=300, bbox_inches='tight', pad_inches=0.1)
         
         # Create metrics
         metrics = self._calculate_metrics(class_indices)
-            
-        # Save figure
-        os.makedirs(output_dir, exist_ok=True)
-        plt.savefig(os.path.join(output_dir, f"confusion_matrix_{date_str}.png"), dpi=300)
         
         # Save metrics
         metrics_df = pd.DataFrame(metrics)
@@ -366,155 +497,11 @@ class ConfusionMatrixAnalyzer:
         print("\nClassification Metrics:")
         print(metrics_df)
         
-        return cm
-    
-    def _save_summary_metrics(self, output_dir):
-        """Save summary metrics even when no confusion matrix can be generated."""
-        # Get date string
-        date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        plt.close()  # Close figure to free memory
+        return cm_tensor
         
-        # Get unique classes that appear in the data
-        active_classes = sorted(list(set(t for t in self.true_labels if t != self.background_idx) | 
-                                   set(p for p in self.pred_labels if p != self.background_idx)))
-        
-        # Count occurrences by class
-        class_counts = {
-            'class_id': [],
-            'class_name': [],
-            'true_count': [],
-            'pred_count': [],
-            'matches': [],
-            'false_negatives': [],  # missed detections
-            'false_positives': [],  # false alarms
-            'true_negatives': [],   # correctly rejected
-        }
-        
-        # Count occurrences for each class that appears in the data
-        for class_idx in active_classes:
-            if class_idx < len(self.class_names):
-                class_name = self.class_names[class_idx]
-            else:
-                class_name = f"Unknown-{class_idx}"
-            
-            # Count all occurrences
-            true_count = sum(1 for t in self.true_labels if t == class_idx)
-            pred_count = sum(1 for p in self.pred_labels if p == class_idx)
-            
-            # Count matches
-            matches = sum(1 for t, p in zip(self.true_labels, self.pred_labels) 
-                        if t == class_idx and p == class_idx)
-            
-            # Count false negatives (missed detections)
-            false_negatives = sum(1 for t, p in zip(self.true_labels, self.pred_labels)
-                                if t == class_idx and p != class_idx)
-            
-            # Count false positives (false alarms)
-            false_positives = sum(1 for t, p in zip(self.true_labels, self.pred_labels)
-                                if t != class_idx and p == class_idx)
-            
-            # Count true negatives (correctly rejected)
-            true_negatives = sum(1 for t, p in zip(self.true_labels, self.pred_labels)
-                               if t != class_idx and p != class_idx)
-            
-            # Add to summary
-            class_counts['class_id'].append(class_idx)
-            class_counts['class_name'].append(class_name)
-            class_counts['true_count'].append(true_count)
-            class_counts['pred_count'].append(pred_count)
-            class_counts['matches'].append(matches)
-            class_counts['false_negatives'].append(false_negatives)
-            class_counts['false_positives'].append(false_positives)
-            class_counts['true_negatives'].append(true_negatives)
-        
-        # Create DataFrame
-        summary_df = pd.DataFrame(class_counts)
-        
-        # Add precision, recall, F1
-        summary_df['precision'] = summary_df.apply(
-            lambda row: row['matches'] / row['pred_count'] if row['pred_count'] > 0 else 0, axis=1)
-        summary_df['recall'] = summary_df.apply(
-            lambda row: row['matches'] / row['true_count'] if row['true_count'] > 0 else 0, axis=1)
-        summary_df['f1_score'] = summary_df.apply(
-            lambda row: 2 * (row['precision'] * row['recall']) / (row['precision'] + row['recall']) 
-            if (row['precision'] + row['recall']) > 0 else 0, axis=1)
-        summary_df['accuracy'] = summary_df.apply(
-            lambda row: (row['matches'] + row['true_negatives']) / 
-            (row['matches'] + row['false_positives'] + row['false_negatives'] + row['true_negatives']), axis=1)
-        
-        # Round floating point columns
-        for col in ['precision', 'recall', 'f1_score', 'accuracy']:
-            summary_df[col] = summary_df[col].round(3)
-            
-        # Add totals row
-        if not summary_df.empty:
-            summary_df.loc['total'] = [
-                -1, 
-                'TOTAL',
-                summary_df['true_count'].sum(),
-                summary_df['pred_count'].sum(),
-                summary_df['matches'].sum(),
-                summary_df['false_negatives'].sum(),
-                summary_df['false_positives'].sum(),
-                summary_df['true_negatives'].sum() / len(active_classes) if active_classes else 0,  # Average TN
-                summary_df['matches'].sum() / summary_df['pred_count'].sum() if summary_df['pred_count'].sum() > 0 else 0,
-                summary_df['matches'].sum() / summary_df['true_count'].sum() if summary_df['true_count'].sum() > 0 else 0,
-                0,  # F1 will be calculated below
-                0   # Accuracy will be calculated below
-            ]
-            
-            # Calculate F1 for total
-            prec = summary_df.loc['total', 'precision']
-            rec = summary_df.loc['total', 'recall']
-            summary_df.loc['total', 'f1_score'] = 2 * (prec * rec) / (prec + rec) if (prec + rec) > 0 else 0
-            summary_df.loc['total', 'f1_score'] = round(summary_df.loc['total', 'f1_score'], 3)
-            
-            # Calculate overall accuracy
-            total_correct = summary_df['matches'].sum() + summary_df['true_negatives'].sum() / len(active_classes)
-            total_samples = len(self.true_labels)
-            summary_df.loc['total', 'accuracy'] = round(total_correct / total_samples, 3) if total_samples > 0 else 0
-        
-        # Save to CSV
-        os.makedirs(output_dir, exist_ok=True)
-        summary_df.to_csv(os.path.join(output_dir, f"summary_metrics_{date_str}.csv"), index=False)
-        
-        # Also save raw labels for debugging
-        labels_df = pd.DataFrame({
-            'true_label': [self.class_names[t] if t != self.background_idx and t < len(self.class_names) 
-                          else 'Background' if t == self.background_idx else f'Unknown-{t}' for t in self.true_labels],
-            'pred_label': [self.class_names[p] if p != self.background_idx and p < len(self.class_names)
-                          else 'Background' if p == self.background_idx else f'Unknown-{p}' for p in self.pred_labels],
-        })
-        labels_df.to_csv(os.path.join(output_dir, f"raw_labels_{date_str}.csv"), index=False)
-        
-        print(f"\nSummary metrics saved to {output_dir}/summary_metrics_{date_str}.csv")
-        print(summary_df)
-        
-        return summary_df
-                
-    def _save_detailed_results(self, output_dir, date_str):
-        """Save detailed results breakdown."""
-        # First call the summary metrics function
-        summary_df = self._save_summary_metrics(output_dir)
-        
-        # Create a detailed per-image breakdown
-        detailed_results = []
-        
-        # Group the true and predicted labels by image
-        images = []
-        true_classes_per_image = []
-        pred_classes_per_image = []
-        
-        curr_image = None
-        curr_true = []
-        curr_pred = []
-        
-        # This is a more detailed version that would require tracking image paths during processing
-        # For now, we'll just save the summary metrics
-        
-        return summary_df
-                
     def _calculate_metrics(self, class_indices):
-        """Calculate precision, recall, and F1 score for all classes."""
+        """Calculate precision, recall, and F1 score for all classes using PyTorch metrics."""
         # Initialize metrics dictionary
         metrics = {
             "Class": [],
@@ -534,6 +521,10 @@ class ConfusionMatrixAnalyzer:
         foreground_f1 = []
         foreground_accuracy = []
         
+        # Convert label pairs to PyTorch tensors for efficient computation
+        true_tensor = torch.tensor(self.true_labels)
+        pred_tensor = torch.tensor(self.pred_labels)
+        
         for class_idx in class_indices:
             # Skip background for metrics calculation
             if class_idx == self.background_idx:
@@ -544,17 +535,25 @@ class ConfusionMatrixAnalyzer:
             else:
                 class_name = f"Unknown-{class_idx}"
                 
-            # Count true positives, false positives, false negatives, and true negatives
-            TP = sum(1 for t, p in self.label_pairs if t == class_idx and p == class_idx)
-            FP = sum(1 for t, p in self.label_pairs if t != class_idx and p == class_idx)
-            FN = sum(1 for t, p in self.label_pairs if t == class_idx and p != class_idx)
-            TN = sum(1 for t, p in self.label_pairs if t != class_idx and p != class_idx)
-            
-            # Calculate precision, recall, F1 score, and accuracy
-            precision = TP / (TP + FP) if (TP + FP) > 0 else 0
-            recall = TP / (TP + FN) if (TP + FN) > 0 else 0
-            f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-            accuracy = (TP + TN) / (TP + FP + FN + TN) if (TP + FP + FN + TN) > 0 else 0
+            # Calculate metrics using PyTorch operations
+            with torch.no_grad():
+                # True positives: both true and predicted are this class
+                TP = torch.sum((true_tensor == class_idx) & (pred_tensor == class_idx)).item()
+                
+                # False positives: true is not this class but predicted is this class
+                FP = torch.sum((true_tensor != class_idx) & (pred_tensor == class_idx)).item()
+                
+                # False negatives: true is this class but predicted is not this class
+                FN = torch.sum((true_tensor == class_idx) & (pred_tensor != class_idx)).item()
+                
+                # True negatives: neither true nor predicted is this class
+                TN = torch.sum((true_tensor != class_idx) & (pred_tensor != class_idx)).item()
+                
+                # Calculate metrics
+                precision = TP / (TP + FP) if (TP + FP) > 0 else 0
+                recall = TP / (TP + FN) if (TP + FN) > 0 else 0
+                f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+                accuracy = (TP + TN) / (TP + FP + FN + TN) if (TP + FP + FN + TN) > 0 else 0
             
             # Add to metrics
             metrics["Class"].append(class_name)
@@ -608,6 +607,61 @@ class ConfusionMatrixAnalyzer:
             metrics["TN"].append(total_tn)
         
         return metrics
+        
+    def _save_detailed_results(self, output_dir, date_str):
+        """Save detailed information about each prediction/ground truth pair."""
+        if not self.label_pairs:
+            print("No label pairs to save.")
+            return
+            
+        # Create DataFrame with columns for true labels, predicted labels, and result type
+        detailed_results = []
+        
+        for true_label, pred_label in self.label_pairs:
+            # Determine the result type
+            if true_label == pred_label and true_label != self.background_idx:
+                result_type = "True Positive"
+            elif true_label != self.background_idx and pred_label == self.background_idx:
+                result_type = "False Negative"
+            elif true_label == self.background_idx and pred_label != self.background_idx:
+                result_type = "False Positive"
+            else:
+                result_type = "True Negative"
+                
+            # Get class names
+            true_name = self.class_names[true_label] if true_label < len(self.class_names) else "Background"
+            pred_name = self.class_names[pred_label] if pred_label < len(self.class_names) else "Background"
+            
+            detailed_results.append({
+                "True_Label_Index": true_label,
+                "True_Label_Name": true_name,
+                "Predicted_Label_Index": pred_label,
+                "Predicted_Label_Name": pred_name,
+                "Result_Type": result_type
+            })
+            
+        # Convert to DataFrame and save
+        results_df = pd.DataFrame(detailed_results)
+        os.makedirs(output_dir, exist_ok=True)
+        results_df.to_csv(os.path.join(output_dir, f"detailed_results_{date_str}.csv"), index=False)
+        print(f"Detailed results saved to {os.path.join(output_dir, f'detailed_results_{date_str}.csv')}")
+        
+    def _save_summary_metrics(self, output_dir):
+        """Save summary metrics when confusion matrix generation fails."""
+        # Create basic metrics for the dataset
+        metrics = {
+            "Total_Images_Processed": self.processed_images,
+            "Skipped_Images": self.skipped_images,
+            "Total_Labels": len(self.true_labels),
+            "Date_Generated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        # Create DataFrame and save
+        metrics_df = pd.DataFrame([metrics])
+        os.makedirs(output_dir, exist_ok=True)
+        date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        metrics_df.to_csv(os.path.join(output_dir, f"summary_metrics_{date_str}.csv"), index=False)
+        print(f"Summary metrics saved to {os.path.join(output_dir, f'summary_metrics_{date_str}.csv')}")
 
 
 def load_config(config_path):
@@ -617,14 +671,32 @@ def load_config(config_path):
     return config
 
 def main():
+    # Get the directory where the script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Default config path relative to the script directory
+    default_config = os.path.join(script_dir,'configs', 'confusion_matrix_config.yaml')
+    
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Confusion Matrix Analysis')
-    parser.add_argument('--config', type=str, default='/home/wardlewo/Reggie/corals/cgras_settler_counter/configs/confusion_matrix_config.yaml',
+    parser.add_argument('--config', type=str, default=default_config,
                         help='Path to the configuration file')
     args = parser.parse_args()
     
+    print(f"Loading config from: {args.config}")
+    
+    # Check if config file exists
+    if not os.path.exists(args.config):
+        print(f"ERROR: Config file not found: {args.config}")
+        print(f"Current directory: {os.getcwd()}")
+        return
+    
     # Load configuration
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+    except Exception as e:
+        print(f"ERROR loading config: {e}")
+        return
     
     # Extract configuration values
     test_img_folder = config['dataset']['test_img_folder']
@@ -665,8 +737,8 @@ def main():
     img_processor = ImageProcessor(classes, class_colours)
     dataset_analyzer = DatasetAnalyzer(img_processor)
     
-    # Initialize the confusion matrix analyzer
-    cm_analyzer = ConfusionMatrixAnalyzer(detector, dataset_analyzer, classes)
+    # Initialize the confusion matrix analyzer - pass class_colours
+    cm_analyzer = ConfusionMatrixAnalyzer(detector, dataset_analyzer, classes, class_colours)
     
     # Get list of test images and labels
     img_list = sorted(glob.glob(os.path.join(test_img_folder, '*.jpg')))
@@ -683,10 +755,10 @@ def main():
     
     # Create and plot confusion matrix
     if plot_normalized:
-        cm_analyzer.plot_confusion_matrix(output_dir, normalize=True)
+        cm_analyzer.plot_confusion_matrix(output_dir, normalize="row")
     
     if plot_raw:
-        cm_analyzer.plot_confusion_matrix(output_dir, normalize=False)
+        cm_analyzer.plot_confusion_matrix(output_dir, normalize=None)
 
     print(f"Results saved to {output_dir}")
 
