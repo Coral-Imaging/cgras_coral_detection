@@ -4,6 +4,7 @@
 # write them to spreadsheet for easy of keeping track
 import random
 import matplotlib.pyplot as plt
+from openpyxl import Workbook
 
 select_width = 4
 select_height = 3 
@@ -43,4 +44,24 @@ ax.set_aspect('equal')
 ax.axis('off')  # Turn off the axes for a cleaner look
 
 plt.savefig('tab_selection.png', dpi=300, bbox_inches='tight')
-plt.show()
+# plt.show()
+
+
+
+# Write tab coordinates to an Excel file
+wb = Workbook()
+ws = wb.active
+ws.title = "Tab Selection"
+
+# Add headers
+ws.append(["Width Index", "Height Index", "Complete"])
+
+# Add tab coordinates
+for h in tab_selection_height:
+    for w in tab_selection_width:
+        ws.append([w, h, 0])
+
+# Save the workbook
+output_file = "tab_selection.xlsx"
+wb.save(output_file)
+print(f"Tab coordinates saved to {output_file}")
