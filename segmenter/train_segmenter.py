@@ -7,7 +7,7 @@ train basic yolov8 model for image segmentation
 from ultralytics import YOLO
 import torch
 
-data_file = '/mnt/hpccs01/home/wardlewo/Data/cgras/Cgras_2023_dataset_labels_updated/Reduced_dataset_patches/cgras_2023+2024_dataset_seg_20250326.yaml'
+data_file = '/mnt/hpccs01/home/wardlewo/Data/cgras/2024_cgras_pdae/pdae_30_filtered_split_tiled_balanced/cgras_data.yaml'
 #data_file = sys.argv[1]
 
 # load model
@@ -25,7 +25,7 @@ model.train(data=data_file,
             device      = [0,1,2,3],       #For HPC, set to 0 or delete otherwise      
             epochs      = 750, 
             batch       = 128,  
-            project     = "runs/20250326_cgras_seg_2023-2024_dataset",
+            project     = "runs/pdae_29042025_cgras_seg_first_30",
             name        = "20250326_8n_train_multiGpu_B128",
             workers     = 8,
             patience    = 50,

@@ -5,14 +5,14 @@ Visualise the predition results using a trained yolov8 weights file
     Works for both masks and bounding boxes, as well as options for SAHI
 """
 #TODO: Rewrite this script to be class based
-from ultralytics import YOLO
+#TODO  Refactor code to import from config file
 import os
 import glob
 import torch
 import cv2 as cv
 import numpy as np
 from PIL import Image
-from Utils import classes, class_colours, overlap_boxes, combine_detections, callback
+from utils.Utils import classes, class_colours, overlap_boxes, combine_detections, callback
 import supervision as sv
 
 # Visualise options
@@ -34,8 +34,11 @@ img_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241
 txt_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/labels/'
 
 # load model
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-model = YOLO(weights_file_path).to(device)
+def load_model(weights_path):
+    from ultralytics import YOLO
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    return YOLO(weights_path).to(device)
+
 slicer = sv.InferenceSlicer(callback=callback, slice_wh=(640, 640), overlap_ratio_wh=(0.1, 0.1))
 
 # functions
@@ -304,6 +307,8 @@ def main():
     txtlist = sorted(glob.glob(os.path.join(txt_folder, '*.txt')))
     imgsave_dir = save_dir
     os.makedirs(imgsave_dir, exist_ok=True)
+
+    model = load_model(weights_file_path)
 
     if not ultralitics_version and not SAHI and not just_groundtruth:
         for i, imgname in enumerate(imglist):
