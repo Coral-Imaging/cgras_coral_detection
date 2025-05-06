@@ -2,24 +2,24 @@
 
 # Dataset paths
 dataset:
-  test_img_folder: '/home/wardlewo/hpc-home/Data/cgras/Cgras_2023_dataset_labels_updated/dataset_2023_built_from_testSet_122/test_0/labels/images'
-  test_label_folder: '/home/wardlewo/hpc-home/Data/cgras/Cgras_2023_dataset_labels_updated/dataset_2023_built_from_testSet_122/test_0/labels/labels'
+  test_img_folder: '/home/wardlewo/hpc-home/Data/cslics/test_data_conf_mat/cslics_2024_october_subsurface_dataset_inprogress/10000000f620da42/images'
+  test_label_folder: '/home/wardlewo/hpc-home/Data/cslics/test_data_conf_mat/cslics_2024_october_subsurface_dataset_inprogress/10000000f620da42/export/obj_train_data'
 
 # Detection type - explicitly set to either "segmentation" or "bbox"
-detection_type: "segmentation"
+detection_type: "bbox"
 
 # Model configuration
 model:
-  model_weights: '/home/wardlewo/hpc-home/ultralytics_output/runs/20250326_cgras_segmentation_2022-2023_dataset_alive_dead/20250326_8n_train_multiGpu_B512_best/weights/best.pt'
+  model_weights: '/home/wardlewo/hpc-home/models/cslics_subsurface_20250205_640p_yolov8n.pt'
 
 # Output configuration
 output:
-  output_dir: '/home/wardlewo/hpc-home/Data/confusion_matrix_results'
+  output_dir: '/media/wardlewo/RRAP02/outputs/confusion_matrix_results'
 
 # Analysis parameters
 parameters:
   max_images: 6000  # Maximum number of images to process
-  min_area: 0.01    # Minimum area threshold as fraction of image size (1%)
+  min_area: 0.000001    # Minimum area threshold as fraction of image size (1%)
   iou_threshold: 0.5  # IOU threshold for matching predictions to ground truth
 
 # Visualization settings

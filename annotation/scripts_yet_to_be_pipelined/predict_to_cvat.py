@@ -12,7 +12,7 @@ import numpy as np
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element, SubElement, ElementTree
 import zipfile
-from analysis.Utils import classes, poly_2_rle
+from analysis.utils.Utils import classes, poly_2_rle
 import sys
 
 ### File locations ###

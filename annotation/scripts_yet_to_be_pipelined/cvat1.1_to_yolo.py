@@ -6,7 +6,7 @@
 import xml.etree.ElementTree as ET
 import numpy as np
 from xml.etree.ElementTree import Element
-from analysis.Utils import rle_to_binary_mask, classes, class_colours
+from analysis.utils.Utils import rle_to_binary_mask, classes, class_colours
 import glob
 import os
 import cv2 as cv

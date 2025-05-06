@@ -12,7 +12,7 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-from analysis.Utils import classes, class_colours
+from analysis.utils.Utils import classes, class_colours
 
 weights_file_path = '/home/java/Java/ultralytics/runs/segment/train4/weights/best.pt'
 img_folder = '/home/java/Java/data/cgras_20230421/train/images'

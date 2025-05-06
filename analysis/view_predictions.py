@@ -5,13 +5,14 @@ Visualise the predition results using a trained yolov8 weights file
     Works for both masks and bounding boxes, as well as options for SAHI
 """
 #TODO: Rewrite this script to be class based
+#TODO  Refactor code to import from config file
 import os
 import glob
 import torch
 import cv2 as cv
 import numpy as np
 from PIL import Image
-from Utils import classes, class_colours, overlap_boxes, combine_detections, callback
+from utils.Utils import classes, class_colours, overlap_boxes, combine_detections, callback
 import supervision as sv
 
 # Visualise options
