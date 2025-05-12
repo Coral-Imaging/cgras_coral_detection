@@ -7,6 +7,7 @@ import numpy as np
 import cv2 as cv
 import yaml
 from pathlib import Path
+from collections import defaultdict
 
 from tqdm import tqdm
 from PIL import Image
@@ -332,7 +333,7 @@ class ImagePatcher:
             print(f"Error loading checkpoint: {e}")
             return {}
 
-    def process_all_datasets(self, resume=False, batch_size=100, memory_limit=None):
+    def process_all_datasets(self, resume=False, batch_size=100, memory_limit=0.8):
         """
         Process all datasets from the YAML file with memory optimization
         
@@ -415,11 +416,12 @@ class ImagePatcher:
                 batch_count += 1
                 if batch_count >= batch_size:
                     batch_count = 0
-                    # Only collect garbage if memory usage is high
-                    mem_info = psutil.Process(os.getpid()).memory_info()
-                    memory_gb = mem_info.rss / (1024 ** 3)
-                    if memory_gb > memory_limit * 0.8:  # 80% of limit
-                        gc.collect()  # Force garbage collection
+                    # Only collect garbage if memory usage is high and memory_limit is specified
+                    if memory_limit is not None:
+                        mem_info = psutil.Process(os.getpid()).memory_info()
+                        memory_gb = mem_info.rss / (1024 ** 3)
+                        if memory_gb > memory_limit * 0.8:  # 80% of limit
+                            gc.collect()  # Force garbage collection
             
             print(f"Completed dataset '{dataset_name}': processed {processed_count} images, created {total_tiles} tiles")
             
@@ -456,7 +458,9 @@ class ImagePatcher:
             # Check if output directory needs to be created or changed
             files_to_add = self.calculate_img_section_no(img_path)
             
-            if self.file_counters[dataset_name] + files_to_add >= self.max_files:
+            # ── Directory-splitting: honour max_files, unless it is disabled ──
+            if self.max_files and self.max_files > 0 and \
+               self.file_counters[dataset_name] + files_to_add >= self.max_files:
                 print(f"Directory {dataset_name}_{self.directory_counts[dataset_name]} full, creating new directory")
                 self.directory_counts[dataset_name] += 1
                 self.file_counters[dataset_name] = 0
@@ -585,101 +589,36 @@ class ImagePatcher:
             return 0
         
     def generate_output_yaml(self):
-        """Generate a YAML file for the tiled dataset"""
-        # Copy original YAML data
+        """
+        Build a YAML that lists *all* images/ directories created, grouped
+        by their prefix ('train', 'val', 'test', 'data', …). Nothing is
+        re-labelled.  Keys with empty lists are omitted.
+        """
         output_yaml = self.yaml_data.copy()
-        
-        # Update path
-        output_yaml['path'] = str(self.output_path.absolute())
-        
-        # Debug information
-        print("\nDEBUG INFO:")
-        print(f"Dataset paths: {self.dataset_paths}")
-        print(f"Directory counts: {self.directory_counts}")
-        
-        # Reset the train, val, test sections to empty lists
-        for key in ['train', 'val', 'test']:
-            if key in output_yaml:
-                output_yaml[key] = []  # Start with empty list
-        
-        # Check if we're directly processing dataset directories
-        # This is a more direct approach that should work even if dataset_paths is incomplete
-        processed_dirs = []
-        for dir_path in self.output_path.glob("*_*_*"):
-            if dir_path.is_dir() and (dir_path / "images").exists():
-                dir_name = dir_path.name
-                # Try to determine split from directory name (train_dataset_0, val_dataset_0, etc.)
-                parts = dir_name.split('_')
-                if len(parts) >= 2 and parts[0] in ['train', 'val', 'test']:
-                    split_type = parts[0]
-                    # Add this directory to the corresponding section
-                    output_yaml[split_type].append(f"{dir_name}/images")
-                    processed_dirs.append(dir_name)
-        
-        print(f"Processed directories: {processed_dirs}")
-        
-        # If no directories were found using the direct method, try the original method
-        if not any(output_yaml.get(key, []) for key in ['train', 'val', 'test']):
-            print("No directories found using direct method, trying original method...")
-            
-            # Original method (with more debug info)
-            for dataset_path, dataset_name in self.dataset_paths:
-                print(f"Processing dataset: {dataset_name} (path: {dataset_path})")
-                
-                # Try to determine split from dataset_name or path
-                split_type = None
-                if dataset_name.startswith(('train_', 'val_', 'test_')):
-                    split_type = dataset_name.split('_')[0]
-                else:
-                    # Try extracting from path
-                    for key in ['train', 'val', 'test']:
-                        if f"/{key}/" in dataset_path:
-                            split_type = key
-                            break
-                    
-                print(f"  Determined split_type: {split_type}")
-                
-                if split_type is None:
-                    print(f"  No split type found for {dataset_name}, skipping")
-                    continue
-                    
-                # Get the base dataset name without prefix
-                base_name = dataset_name
-                if dataset_name.startswith(f"{split_type}_"):
-                    base_name = dataset_name[len(split_type)+1:]
-                    
-                print(f"  Base name: {base_name}")
-                print(f"  Directory counts keys: {list(self.directory_counts.keys())}")
-                
-                # Find all directories that match this pattern
-                matching_dirs = [d for d in self.output_path.glob(f"{split_type}_{base_name}_*") if d.is_dir()]
-                if not matching_dirs:
-                    print(f"  No matching directories found for {split_type}_{base_name}_*")
-                    # Try looking for directories without number suffix
-                    matching_dirs = [d for d in self.output_path.glob(f"{split_type}_{base_name}") if d.is_dir()]
-                    
-                print(f"  Matching directories: {[d.name for d in matching_dirs]}")
-                
-                # Add all matching directories to the YAML
-                for dir_path in matching_dirs:
-                    if (dir_path / "images").exists():
-                        output_yaml[split_type].append(f"{dir_path.name}/images")
-        
-        for key in ['train', 'val', 'test']:
-            if key in output_yaml and not output_yaml[key]:
-                del output_yaml[key]
+        output_yaml['path'] = str(self.output_path.resolve())
 
-        # Write the YAML file
+        # Collect paths by prefix
+        groups = defaultdict(list)
+
+        for img_dir in self.output_path.rglob("images"):
+            rel_path  = img_dir.relative_to(self.output_path).as_posix()
+            prefix    = img_dir.parent.name.split('_')[0]   # first token before '_'
+            groups[prefix].append(rel_path)
+
+        # Merge groups into YAML (keep original prefixes)
+        for prefix, paths in groups.items():
+            output_yaml[prefix] = sorted(paths)
+
         yaml_path = self.output_path / "cgras_data.yaml"
+        with open(yaml_path, "w") as f:
+            yaml.safe_dump(output_yaml, f, sort_keys=False)
+
         self.new_yaml_path = yaml_path
-        with open(yaml_path, 'w') as f:
-            yaml.dump(output_yaml, f, default_flow_style=False, sort_keys=False)
-            
+
         print(f"\nGenerated tiled dataset YAML: {yaml_path}")
-        print(f"YAML contents:")
-        for key in ['train', 'val', 'test']:
-            if key in output_yaml:
-                print(f"{key}: {output_yaml[key]}")
+        for key, paths in groups.items():
+            print(f"  {key}: {len(paths)} folder(s)")
+
 
 
 def main():

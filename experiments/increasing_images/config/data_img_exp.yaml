@@ -1,0 +1,28 @@
+# CGRAS Data Processing Pipeline Configuration
+
+# Project details
+project_name: "amag_exp"  # Name of the project
+input_path: "/media/java/RRAP03/data/outputs/data_pipleline/amag130/cgras_data.yaml"
+output_base_path: "/media/java/RRAP03/data/outputs/experiments/num_image_exp"  # Base output directory
+
+# Pipeline steps to run (in order)
+pipeline:
+  - filter
+  - patch
+  - balance
+
+filter:
+  enabled: true
+  class_ids: [0, 1, 2, 3]  # Classes to filter
+  min_pixel_area: [175, 175, 200, 200] # Different thresholds for different classes
+  copy_images: true  # Whether to copy image files or just labels
+
+patch:
+  enabled: true
+  tile_width: 640
+  tile_height: 640
+  truncate_percent: 0.5  # Minimum percentage of object that must be in tile # check whether we still want this
+  max_files: 0  # Maximum files per directory. This should be 16382 by default, but 0, null, or -1 will not limit the number of files.
+
+balance:
+  enabled: true

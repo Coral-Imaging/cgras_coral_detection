@@ -29,8 +29,11 @@ def setup_logging(log_level=logging.INFO):
     )
     return logging.getLogger("pipeline")
 
-def load_config(config_path):
+def load_config(config_path, logger=None):
     """Load the YAML configuration file."""
+    if logger is None:
+        logger = logging.getLogger("pipeline")
+        
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
@@ -58,8 +61,11 @@ def run_folder_structure(config, input_path, output_path):
         logger.error("Folder structure validation failed.")
         sys.exit(1)
 
-def run_filter(config, input_yaml_path, output_path):
+def run_filter(config, input_yaml_path, output_path, logger=None):
     """Run the filter step."""
+    if logger is None:
+        logger = logging.getLogger("pipeline")
+
     logger.info("Starting filter step...")
     
     filter_config = config.get('filter', {})
@@ -85,8 +91,11 @@ def run_filter(config, input_yaml_path, output_path):
     logger.info(f"Filter step completed. Output at: {output_path}")
     return filterer.new_yaml_path
 
-def run_split(config, input_yaml_path, output_path):
+def run_split(config, input_yaml_path, output_path, logger=None):
     """Run the split step."""
+    if logger is None:
+        logger = logging.getLogger("pipeline")
+
     logger.info("Starting split step...")
     
     split_config = config.get('split', {})
@@ -125,8 +134,11 @@ def run_split(config, input_yaml_path, output_path):
         logger.error("Split step failed during export.")
         sys.exit(1)
 
-def run_patch(config, input_yaml_path, output_path):
+def run_patch(config, input_yaml_path, output_path, logger=None):
     """Run the patch (tiling) step."""
+    if logger is None:
+        logger = logging.getLogger("pipeline")
+
     logger.info("Starting patch step...")
     
     patch_config = config.get('patch', {})
@@ -153,8 +165,11 @@ def run_patch(config, input_yaml_path, output_path):
     logger.info(f"Patch step completed. Output at: {output_path}")
     return patcher.new_yaml_path
 
-def run_balance(config, input_yaml_path, output_path):
+def run_balance(config, input_yaml_path, output_path, logger=None):
     """Run the balance step."""
+    if logger is None:
+        logger = logging.getLogger("pipeline")
+
     logger.info("Starting balance step...")
       
     # Initialize the balancer
@@ -166,8 +181,11 @@ def run_balance(config, input_yaml_path, output_path):
     logger.info(f"Balance step completed. Output at: {output_path}")
     return balancer.new_yaml_path
 
-def run_pipeline(config):
+def run_pipeline(config, logger=None):
     """Run the entire pipeline based on the configuration."""
+    if logger is None:
+        logger = logging.getLogger("pipeline")
+        
     pipeline_steps = config.get('pipeline', [])
     project_name = config.get('project_name', 'default')
     input_path = config.get('input_path')
@@ -180,10 +198,12 @@ def run_pipeline(config):
     # Convert to Path objects
     input_path = Path(input_path)
     output_base_path = Path(output_base_path)
+
+    input_is_yaml = str(input_path).lower().endswith('.yaml')
+    current_yaml_path = input_path if input_is_yaml else None
     
     # Initialize output path with just the project name
     current_output_path = output_base_path / project_name
-    current_yaml_path = None
     
     # Create a chain of output paths based on the enabled steps
     step_suffix_map = {
@@ -196,12 +216,17 @@ def run_pipeline(config):
     
     # Track steps run and build output path
     output_suffix = ''
+    intermediate_paths = []
     
     # Run each step in the pipeline
     for step in pipeline_steps:
         step_config = config.get(step, {})
         enabled = step_config.get('enabled', True)
         
+        if step == 'folder_structure' and input_is_yaml:
+            logger.info(f"Skipping {step} step (input is already a YAML file)")
+            continue
+
         if not enabled:
             logger.info(f"Skipping {step} step (disabled in config)")
             continue
@@ -219,6 +244,9 @@ def run_pipeline(config):
         else:
             current_output_path = output_base_path / project_name
         
+        if step != pipeline_steps[-1]:
+            intermediate_paths.append(current_output_path)
+
         # Make sure output directory exists
         os.makedirs(current_output_path, exist_ok=True)
         
@@ -226,29 +254,40 @@ def run_pipeline(config):
         logger.info(f"Running step: {step} with output to {current_output_path}")
         
         if step == 'folder_structure':
-            current_yaml_path = run_folder_structure(config, input_path, current_output_path)
+            current_yaml_path = run_folder_structure(config, input_path, current_output_path, logger)
         elif step == 'filter':
             if not current_yaml_path:
                 logger.error("No input YAML path available for filter step.")
                 sys.exit(1)
-            current_yaml_path = run_filter(config, current_yaml_path, current_output_path)
+            current_yaml_path = run_filter(config, current_yaml_path, current_output_path, logger)
         elif step == 'split':
             if not current_yaml_path:
                 logger.error("No input YAML path available for split step.")
                 sys.exit(1)
-            current_yaml_path = run_split(config, current_yaml_path, current_output_path)
+            current_yaml_path = run_split(config, current_yaml_path, current_output_path, logger)
         elif step == 'patch':
             if not current_yaml_path:
                 logger.error("No input YAML path available for patch step.")
                 sys.exit(1)
-            current_yaml_path = run_patch(config, current_yaml_path, current_output_path)
+            current_yaml_path = run_patch(config, current_yaml_path, current_output_path, logger)
         elif step == 'balance':
             if not current_yaml_path:
                 logger.error("No input YAML path available for balance step.")
                 sys.exit(1)
-            current_yaml_path = run_balance(config, current_yaml_path, current_output_path)
+            current_yaml_path = run_balance(config, current_yaml_path, current_output_path, logger)
         else:
             logger.warning(f"Unknown pipeline step: {step}, skipping.")
+
+    # Clean up intermediate directories
+    logger.info("Cleaning up intermediate directories...")
+    for path in intermediate_paths:
+        try:
+            if path.exists():
+                import shutil
+                shutil.rmtree(path)
+                logger.info(f"Removed intermediate directory: {path}")
+        except Exception as e:
+            logger.warning(f"Failed to remove directory {path}: {e}")
 
     logger.info("Pipeline completed successfully!")
     logger.info(f"Final output path: {current_output_path}")
@@ -275,7 +314,7 @@ if __name__ == "__main__":
     
     # Run the pipeline
     try:
-        run_pipeline(config)
+        run_pipeline(config, logger)
     except Exception as e:
         logger.exception(f"Pipeline failed with error: {e}")
         sys.exit(1)

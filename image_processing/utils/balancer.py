@@ -124,14 +124,13 @@ class DatasetBalancer:
         
         # Initialize split stats for each available split type
         for split_type in self.dataset_paths.keys():
-            if split_type != 'data':  # Skip the generic 'data' key
-                self.split_stats[split_type] = {
-                    'non_empty': 0, 
-                    'empty': 0, 
-                    'total': 0,
-                    'datasets': [],
-                    'balanced_sample': 0
-                }
+            self.split_stats[split_type] = {
+                'non_empty': 0, 
+                'empty': 0, 
+                'total': 0,
+                'datasets': [],
+                'balanced_sample': 0
+            }
         
         # Process each dataset path
         for data_path in self.data_paths:
@@ -493,7 +492,7 @@ class DatasetBalancer:
         plt.tight_layout()
         plt.show()
     
-    def balance_datasets(self, random_seed=42):
+    def balance_datasets(self, random_seed=42, preserve_all_non_empty=True):
         """
         Balance all datasets by ensuring equal numbers of empty and non-empty label files,
         treating each split (train/val/test) as a whole group, but preserving the original
@@ -501,6 +500,8 @@ class DatasetBalancer:
         
         Args:
             random_seed (int): Random seed for reproducibility
+            preserve_all_non_empty (bool): If True, always keep all non-empty labels and only
+                                        reduce empty labels when they outnumber non-empty
             
         Returns:
             dict: Statistics about the balancing process
@@ -592,14 +593,28 @@ class DatasetBalancer:
                 print(f"Warning: No empty labels found in {split_type}. Keeping all non-empty labels.")
                 selected_non_empty = non_empty_images
                 selected_empty = []
-            elif non_empty_count <= empty_count:
-                # Keep all non-empty and sample from empty
+            elif preserve_all_non_empty:
+                # Always keep all non-empty labels
                 selected_non_empty = non_empty_images
-                selected_empty = random.sample(empty_images, non_empty_count)
+                
+                # Only balance by reducing empty labels if they outnumber non-empty
+                if empty_count > non_empty_count:
+                    selected_empty = random.sample(empty_images, non_empty_count)
+                    print(f"Balancing by reducing {empty_count - non_empty_count} empty labels")
+                else:
+                    # If empty labels don't outnumber non-empty, keep all of them too
+                    selected_empty = empty_images
+                    print(f"Keeping all labels (no balancing needed)")
             else:
-                # Keep all empty and sample from non-empty
-                selected_non_empty = random.sample(non_empty_images, empty_count)
-                selected_empty = empty_images
+                # Original logic - balance by sampling whichever category has more
+                if non_empty_count <= empty_count:
+                    # Keep all non-empty and sample from empty
+                    selected_non_empty = non_empty_images
+                    selected_empty = random.sample(empty_images, non_empty_count)
+                else:
+                    # Keep all empty and sample from non-empty
+                    selected_non_empty = random.sample(non_empty_images, empty_count)
+                    selected_empty = empty_images
             
             # Copy selected files, preserving their original relative paths
             selected_images = selected_non_empty + selected_empty
@@ -713,7 +728,9 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
     parser.add_argument("--threads", type=int, help="Number of worker threads")
     parser.add_argument("--no-prompt", action="store_true", help="Skip confirmation prompt before balancing")
-        
+    parser.add_argument("--balance-all", action="store_true", 
+                      help="Balance by potentially removing non-empty labels (default: only remove empty labels when they outnumber non-empty)")
+           
     args = parser.parse_args()
         
     balancer = DatasetBalancer(args.yaml_path, args.output, args.threads)
@@ -733,6 +750,7 @@ if __name__ == "__main__":
             proceed = user_input.lower() == 'y'
                 
         if proceed:
-            balancer.balance_datasets(random_seed=args.seed)
+            preserve_all_non_empty = not args.balance_all
+            balancer.balance_datasets(random_seed=args.seed, preserve_all_non_empty=preserve_all_non_empty)
         else:
             print("Balancing canceled.")
