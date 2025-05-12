@@ -3,15 +3,15 @@
 # Project settings
 project: "cgras_segmentation"
 name: "train_amag30"
-model_path: "/media/java/RRAP03/models/yolov8n-seg.pt"
-yaml_path: "/media/java/RRAP03/data/outputs/data_pipleline/amag30_filtered_split_tiled_balanced/cgras_data.yaml"
+model_path: "/mnt/hpccs01/home/gonia/data/outputs/models/yolov8n-seg.pt"
+yaml_path: "/mnt/hpccs01/home/gonia/data/outputs/data_pipleline/amag30_filtered_split_tiled_balanced/cgras_data.yaml"
 
 # Training parameters
 classes: [0, 1, 2, 3]  # Coral and Polyp
 pretrained: true
 epochs: 1000
 batch_size: 0.8
-workers: 4
+workers: 8
 save_period: 10
 patience: 25
 mask_overlap: false
