@@ -9,9 +9,9 @@ from collections import defaultdict
 from image_processing import load_config, run_pipeline, setup_logging
 
 # ------- configuration to tweak quickly -------
-CONFIG_FILE   = Path("/home/java/repos/cgras_coral_detection/experiments/increasing_images/config/amag_experiment.yaml")   # the YAML you just sent
-SEEDS         = [42, 73, 105]                  # three experiment runs
-BUCKET_SIZE   = 10                             # each bucket = 10 images
+CONFIG_FILE   = Path("/home/java/repos/cgras_coral_detection/experiments/increasing_images/config/amag_experiment.yaml")
+SEEDS         = [42, 73, 105]
+BUCKET_SIZE   = 10                            
 VAL_COUNT     = 15
 TEST_COUNT    = 15
 

@@ -3,13 +3,14 @@
 # Project settings
 project: "img_exp"
 name: "train_amag"
-model_path: "/media/java/RRAP03/models/yolov8n-seg.pt"
+model_path: "yolov8n-seg.pt"
 
 # Training parameters
 classes: [0, 1, 2, 3]  # Coral and Polyp
 pretrained: true
+deterministic: false
 epochs: 1000
-batch_size: 0.75
+batch_size: 0.6
 workers: 4
 save_period: 10
 patience: 20
@@ -27,3 +28,4 @@ conf: [0.001, 0.3, 0.5, 0.7]
 iou: 0.5
 plots: true
 split: "test"
+val_batch_size: 8
