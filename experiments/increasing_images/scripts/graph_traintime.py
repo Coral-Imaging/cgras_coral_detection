@@ -69,7 +69,7 @@ else:
     ylabel = 'Total Training Time (seconds)'
 
 plt.ylabel(ylabel)
-plt.title('Training Time vs Number of Training Images')
+# plt.title('Training Time vs Number of Training Images')
 
 if SET_LIMITS:
     plt.xlim(0, 100)

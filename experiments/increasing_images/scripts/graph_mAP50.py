@@ -56,7 +56,7 @@ for conf_level in sorted(full_df['conf'].unique()):
 # === FINAL SETTINGS ===
 plt.xlabel('Number of Training Images')
 plt.ylabel('mAP50')
-plt.title('mAP50 Performance vs Training Image Count')
+# plt.title('mAP50 Performance vs Training Image Count')
 
 if SET_LIMITS:
     plt.xlim(0, 100)
