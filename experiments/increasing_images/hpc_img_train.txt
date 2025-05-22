@@ -1,0 +1,8 @@
+#!/bin/bash -l
+#PBS -N train_img_exp_A100
+#PBS -l select=1:ncpus=16:mem=430GB:ngpus=1:gpu_id=A100
+#PBS -l walltime=48:00:00
+#PBS -j oe
+source /home/gonia/miniforge3/bin/activate cgras
+cd repos/cgras_coral_detection/
+python3 experiments/increasing_images/scripts/train_img_exp.py --seed-dirs /home/gonia/data/outputs/experiments/data_img_exp/data_img_exp/seed_XX --train-cfg /home/gonia/repos/cgras_coral_detection/experiments/increasing_images/config/train_img_exp.yaml --num-runs 1 --out-dir /home/gonia/data/outputs/experiments/num_image_exp/train_output/

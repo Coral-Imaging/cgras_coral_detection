@@ -2,8 +2,8 @@
 
 # Project details
 project_name: "amag_exp"  # Name of the project
-input_path: "/media/java/RRAP03/data/outputs/data_pipleline/amag130/cgras_data.yaml"
-output_base_path: "/media/java/RRAP03/data/outputs/experiments/num_image_exp"  # Base output directory
+input_path: "" # "/media/java/RRAP03/data/outputs/data_pipleline/amag130/cgras_data.yaml"
+output_base_path: "" # "/media/java/RRAP03/data/outputs/experiments/num_image_exp"
 
 # Pipeline steps to run (in order)
 pipeline:
