@@ -43,8 +43,11 @@ def load_config(config_path, logger=None):
         logger.error(f"Error loading config file: {e}")
         sys.exit(1)
 
-def run_folder_structure(config, input_path, output_path):
+def run_folder_structure(config, input_path, output_path, logger=None):
     """Run the folder structure step."""
+    if logger is None:
+        logger = logging.getLogger("pipeline")
+        
     logger.info("Starting folder structure step...")
     
     structurer = FolderStructurer(input_path, output_path)
