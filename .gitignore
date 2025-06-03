@@ -136,3 +136,9 @@ complete
 home/java/Downloads/yolov8n-seg.pt
 home/java/Java/data/cgras_20230421
 runs/*
+
+# outputs
+cgras_segmentation
+sahi_project
+outputs
+archive

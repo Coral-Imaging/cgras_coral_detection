@@ -1,0 +1,31 @@
+# Training configuration for image segmentation
+
+# Project settings
+project: "img_exp"
+name: "train_amag"
+model_path: "yolov8n-seg.pt"
+
+# Training parameters
+classes: [0, 1, 2, 3]  # Coral and Polyp
+pretrained: true
+deterministic: false
+epochs: 1000
+batch_size: 0.6
+workers: 4
+save_period: 10
+patience: 20
+mask_overlap: false
+device: 0  # device = [0, 1, 2, 3]
+
+# Augmentation parameters
+image_size: 640
+scale: 0.2
+flipud: 0.5
+fliplr: 0.5
+
+# Validation parameters
+conf: [0.001, 0.3, 0.5, 0.7]
+iou: 0.5
+plots: true
+split: "test"
+val_batch_size: 8

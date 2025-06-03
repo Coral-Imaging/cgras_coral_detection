@@ -1,0 +1,43 @@
+# CGRAS Data Processing Pipeline Configuration
+
+# Project details
+project_name: "amag_process"  # Name of the project
+input_path: "/media/java/RRAP03/data/exported_from_cvat/amag130"  # Absolute path to the input data from CVAT
+output_base_path: "/media/java/RRAP03/data/outputs/data_pipleline"  # Base output directory
+
+# Pipeline steps to run (in order)
+pipeline:
+  - folder_structure
+  - filter
+  - split
+  - patch
+  - balance
+
+# Step-specific configurations
+folder_structure:
+  enabled: true  # Set to false to skip this step
+
+filter:
+  enabled: true
+  class_ids: [0, 1, 2, 3]  # Classes to filter
+  min_pixel_area: [175, 175, 200, 200] # Different thresholds for different classes
+  copy_images: true  # Whether to copy image files or just labels
+
+split:
+  enabled: true
+  split_field: null  # Field to split by (e.g., tile, week)
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  stratify_by: null  # Field to stratify by (null for no stratification)
+  random_seed: 42
+
+patch:
+  enabled: true
+  tile_width: 640
+  tile_height: 640
+  truncate_percent: 0.5  # Minimum percentage of object that must be in tile # check whether we still want this
+  max_files: 16382  # Maximum files per directory
+
+balance:
+  enabled: true

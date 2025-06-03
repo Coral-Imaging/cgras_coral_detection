@@ -1,0 +1,79 @@
+[
+  {
+    "name": "recruit_live_white",
+    "id": 690185,
+    "color": "#ffff7e",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "recruit_cluster_live_white",
+    "id": 690186,
+    "color": "#f9f905",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "recruit_symbiotic",
+    "id": 690187,
+    "color": "#75c191",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "recruit_cluster_symbiotic",
+    "id": 690188,
+    "color": "#24b353",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "recruit_partial",
+    "id": 690189,
+    "color": "#948dba",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "recruit_cluster_partial",
+    "id": 690190,
+    "color": "#652aaf",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "recruit_dead",
+    "id": 690191,
+    "color": "#fb98a8",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "recruit_cluster_dead",
+    "id": 690192,
+    "color": "#fa3253",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "grazer_snail",
+    "id": 690193,
+    "color": "#13ecd8",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "pest_tubeworm",
+    "id": 690194,
+    "color": "#ff6a4d",
+    "type": "any",
+    "attributes": []
+  },
+  {
+    "name": "unknown",
+    "id": 690195,
+    "color": "#292605",
+    "type": "any",
+    "attributes": []
+  }
+]

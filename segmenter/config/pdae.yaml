@@ -1,0 +1,24 @@
+# Training configuration for image segmentation
+
+# Project settings
+project: "cgras_segmentation"
+name: "train_Pdae130"
+model_path: "yolov8n-seg.pt"
+yaml_path: "Data/cgras/pdae_100/Pdae130_filtered_split_tiled_balanced/cgras_data.yaml"
+
+# Training parameters
+classes: [0, 1]  # Coral and Polyp
+pretrained: true
+epochs: 1000
+batch_size: 0.95
+workers: 4
+save_period: 10
+patience: 25
+mask_overlap: false
+device: 0 # device = [0, 1, 2, 3]
+
+# Augmentation parameters
+image_size: 640
+scale: 0.2
+flipud: 0.5
+fliplr: 0.5
