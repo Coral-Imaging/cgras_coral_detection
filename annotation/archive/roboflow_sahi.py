@@ -20,7 +20,7 @@ import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element, SubElement, ElementTree
 import zipfile
 import torch
-from Utils import classes, class_colours, binary_mask_to_rle, rle_to_binary_mask, overlap_boxes, combine_detections, callback
+from analysis.utils.Utils import classes, class_colours, binary_mask_to_rle, rle_to_binary_mask, overlap_boxes, combine_detections, callback
 
 weight_file = '/home/java/Java/ultralytics/runs/segment/train13/weights/best.pt' #trained on labeled list iteration 1 and 2 with albmumentations
 base_img_location = '/media/java/CGRAS-SSD/cgras_data_copied_2240605/samples/cgras_data_copied_2240605_ultralytics_data/images'

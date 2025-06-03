@@ -1,0 +1,61 @@
+# Configuration for Confusion Matrix Analysis
+
+# Dataset paths
+dataset:
+  test_img_folder: '/home/wardlewo/hpc-home/Data/cslics/test_data_conf_mat/cslics_2024_october_subsurface_dataset_inprogress/10000000f620da42/images'
+  test_label_folder: '/home/wardlewo/hpc-home/Data/cslics/test_data_conf_mat/cslics_2024_october_subsurface_dataset_inprogress/10000000f620da42/export/obj_train_data'
+
+# Detection type - explicitly set to either "segmentation" or "bbox"
+detection_type: "bbox"
+
+# Model configuration
+model:
+  model_weights: '/home/wardlewo/hpc-home/models/cslics_subsurface_20250205_640p_yolov8n.pt'
+
+# Output configuration
+output:
+  output_dir: '/media/wardlewo/RRAP02/outputs/confusion_matrix_results'
+
+# Analysis parameters
+parameters:
+  max_images: 6000  # Maximum number of images to process
+  min_area: 0.000001    # Minimum area threshold as fraction of image size (1%)
+  iou_threshold: 0.5  # IOU threshold for matching predictions to ground truth
+
+# Visualization settings
+visualization:
+  plot_normalized: true  # Plot normalized confusion matrix
+  plot_raw: true         # Plot raw confusion matrix
+  dpi: 300               # DPI for output images
+
+#Classes 
+classes: ["alive_coral", "dead_coral"]
+
+# Color definitions
+colors:
+  orange: [255, 128, 0]
+  blue: [0, 212, 255]
+  purple: [170, 0, 255]
+  yellow: [255, 255, 0]
+  brown: [144, 65, 2]
+  green: [0, 255, 0]
+  red: [255, 0, 0]
+  cyan: [0, 255, 255]
+  dark_purple: [128, 0, 128]
+  light_grey: [192, 192, 192]
+  dark_green: [0, 100, 0]
+  
+  # Explicit class color mapping
+  class_colours:
+    alive_coral: [0, 212, 255]  # blue
+    dead_coral: [0, 255, 0]     # green
+
+# Additional evaluation metrics to calculate
+metrics:
+  calculate_iou: true           # Calculate Intersection over Union
+  calculate_dice: true          # Calculate Dice coefficient (F1 for segmentation)
+  calculate_mAP: false          # Calculate mean Average Precision (requires confidence scores)
+  normalize_methods: ["row", "column", "all"]  # Different normalization methods for visualization
+  binary_metrics: true          # Calculate binary metrics treating each class as positive vs rest
+  show_text_matrix: true        # Show text-based matrix in console output
+
