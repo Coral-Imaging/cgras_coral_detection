@@ -18,7 +18,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 class ImagePatcher:
     def __init__(self, yaml_path, output_path, tile_width=640, tile_height=640, 
-                 truncate_percent=0.5, max_files=16382, num_workers=None):
+                 truncate_percent=0.5, max_files=16382, num_workers=None, min_viable_area=20.0, min_fraction=0.1):
         """Initialize the Image Patcher with the given parameters."""
         # Input/output paths
         self.yaml_path = Path(yaml_path)
@@ -31,6 +31,8 @@ class ImagePatcher:
         self.max_files = max_files
         self.new_yaml_path = None
         self.use_containment_check = True
+        self.min_viable_area = min_viable_area  # Minimum area for split objects
+        self.min_fraction = min_fraction  # Minimum fraction of original polygon for split objects
 
         # Workers for parallel processing
         self.num_workers = num_workers if num_workers is not None else multiprocessing.cpu_count()
@@ -165,7 +167,18 @@ class ImagePatcher:
         if not polygon_box.intersects(tile_box):
             return False
         intersection = polygon.intersection(tile_box)
-        return intersection.area > (threshold * polygon.area)
+        intersection_area = intersection.area
+
+        # Condition 1: Most of polygon is in tile
+        if intersection_area > (threshold * polygon.area):
+            return True
+
+        # Condition 2: Minimum viable area for split objects is in tile
+        if intersection_area >= self.min_viable_area:
+            # Additional check: intersection should be at least 10% of original to avoid tiny fragments being included
+            if intersection_area >= (self.min_fraction * polygon.area):
+                return True
+        return False
 
     def truncate_polygon(self, polygon, x_start, x_end, y_start, y_end):
         """Returns a polygon with points constrained to a specified bounding box."""

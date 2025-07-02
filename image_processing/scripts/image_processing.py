@@ -151,7 +151,9 @@ def run_patch(config, input_yaml_path, output_path, logger=None):
     tile_height = patch_config.get('tile_height', 640)
     truncate_percent = patch_config.get('truncate_percent', 0.5)
     max_files = patch_config.get('max_files', 16382)
-    
+    min_viable_area = patch_config.get('min_viable_area', 20.0)
+    min_fraction = patch_config.get('min_fraction', 0.1)
+
     # Initialize the patcher
     patcher = ImagePatcher(
         input_yaml_path, 
@@ -160,6 +162,8 @@ def run_patch(config, input_yaml_path, output_path, logger=None):
         tile_height=tile_height,
         truncate_percent=truncate_percent,
         max_files=max_files,
+        min_viable_area=min_viable_area,
+        min_fraction=min_fraction,
     )
     
     # Process datasets

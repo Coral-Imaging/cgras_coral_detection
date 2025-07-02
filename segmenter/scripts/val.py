@@ -11,9 +11,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.validator import SegmentationValidator
 
 # MODEL_PATH = "/home/java/repos/cgras_coral_detection/segmenter/cgras_segmentation/train7/weights/best.pt"
-MODEL_PATH = "/home/java/hpc-home/cgras_segmentation/train_coral_polyp/weights/best.pt"
-YAML_PATH = "/media/java/RRAP03/outputs/train/cgras_data.yaml"
-OUTPUT_PATH = "/media/java/RRAP03/outputs/val"
+MODEL_PATH = "/home/alexanderjones/Alex/hpc-home/data/amag/model_outputs/train_amag_early10/weights/best.pt"
+YAML_PATH = "/home/alexanderjones/Alex/hpc-home/data/amag/segmentation_outputs/amag_early10_filtered_split_tiled_balanced/cgras_data.yaml"
+OUTPUT_PATH = "/home/alexanderjones/Alex/hpc-home/data/amag/prediction_outputs"
 CONF_THRESHOLD = 0.5
 IOU_THRESHOLD = 0.5
 

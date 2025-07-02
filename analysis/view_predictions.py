@@ -24,14 +24,10 @@ bounding_boxes = False #if bounding boxes are to be visualised
 batch_height, batch_width = 3000, 3000
 
 # files / data locations
-weights_file_path = "/mnt/hpccs01/home/wardlewo/20250205_cgras_segmentation_alive_dead/train7/weights/best.pt"
-save_dir = '/mnt/hpccs01/home/wardlewo/Data/Visualisation'
-img_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/images/'
-txt_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/labels/'
-weights_file_path = "/mnt/hpccs01/home/wardlewo/20250205_cgras_segmentation_alive_dead/train7/weights/best.pt"
-save_dir = '/mnt/hpccs01/home/wardlewo/Data/Visualisation'
-img_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/images/'
-txt_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/labels/'
+weights_file_path = "/home/alexanderjones/Alex/hpc-home/data/amil/model_outputs/train_amil130/weights/best.pt"
+save_dir = '/home/alexanderjones/Alex/hpc-home/data/amil/prediction_outputs/amil_test_3'
+img_folder = '/home/alexanderjones/Alex/hpc-home/data/amil/segmentation_outputs/amil_test_3/amil_test_filtered_split_tiled_balanced/train_train_0/images'
+txt_folder = '/home/alexanderjones/Alex/hpc-home/data/amil/segmentation_outputs/amil_test_3/amil_test_filtered_split_tiled_balanced/train_train_0/labels'
 
 # load model
 def load_model(weights_path):
@@ -127,7 +123,7 @@ def save_image_predictions_mask(results, image, imgname, save_path, conf, class_
     font_size = 1.5#int(round(line_tickness/2))
     font_thickness = 2#3*(abs(line_tickness-font_size))+font_size
     if results and results[0].masks:
-        for j, m in enumerate(results.masks):
+        for j, m in enumerate(results[0].masks):
             xyn = np.array(m.xyn)
             xyn[0, :, 0] = (xyn[0, :, 0] * width)
             xyn[0, :, 1] = (xyn[0, :, 1] * height)
@@ -140,10 +136,6 @@ def save_image_predictions_mask(results, image, imgname, save_path, conf, class_
                 cv.fillPoly(masked, [points], desired_color)
                 xmin = min(xyn[0, :, 0])
                 ymin = min(xyn[0, :, 1])
-                # Draw black outline
-                cv.putText(image, f"{conf[j]:.2f}: {cls_name}", (int(xmin-20), int(ymin - 15)), cv.FONT_HERSHEY_SIMPLEX, font_size, (0, 0, 0), font_thickness + 1)
-                # Draw text in class color
-                cv.putText(image, f"{conf[j]:.2f}: {cls_name}", (int(xmin-20), int(ymin - 15)), cv.FONT_HERSHEY_SIMPLEX, font_size, desired_color, font_thickness)
                 # Draw black outline
                 cv.putText(image, f"{conf[j]:.2f}: {cls_name}", (int(xmin-20), int(ymin - 15)), cv.FONT_HERSHEY_SIMPLEX, font_size, (0, 0, 0), font_thickness + 1)
                 # Draw text in class color
@@ -222,8 +214,7 @@ def update_lists(box_list, conf_list, cls_id_list, mask_list, sliced_detections,
         conf_list.append(conf)
     for cls_id in sliced_detections.class_id:
         cls_id_list.append(cls_id)
-    for data in sliced_detections.data['class_name']:
-        data_dict['class_name'].append(data)
+    # Remove the problematic data_dict line since it's not defined
     for mask in sliced_detections.mask:
         mask_resized = cv.resize(mask.astype(np.uint8), (x_end - x, y_end - y))
         rows, cols = np.where(mask_resized == 1)

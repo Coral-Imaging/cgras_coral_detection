@@ -1,9 +1,9 @@
 # CGRAS Data Processing Pipeline Configuration
 
 # Project details
-project_name: "amag130"  # Name of the project
-input_path: "data/amag/cvat_outputs/amag130/amag130"  # Absolute path to the input data from CVAT
-output_base_path: "data/amag/segmentation_outputs"  # Base output directory
+project_name: "amil_test"  # Name of the project
+input_path: "data/amil/cvat_outputs/amil_test/cgras_data.yaml"  # Absolute path to the input data from CVAT
+output_base_path: "data/amil/segmentation_outputs/amil_test_3"  # Base output directory
 
 # Pipeline steps to run (in order)
 pipeline:
@@ -19,8 +19,8 @@ folder_structure:
 
 filter:
   enabled: true
-  class_ids: [0, 1, 2, 3]  # Classes to filter
-  min_pixel_area: [175, 175, 200, 200] # Different thresholds for different classes
+  class_ids: [0, 1]  # Classes to filter
+  min_pixel_area: [200, 200] # Different thresholds for different classes
   copy_images: true  # Whether to copy image files or just labels
 
 split:
@@ -38,6 +38,8 @@ patch:
   tile_height: 640
   truncate_percent: 0.5  # Minimum percentage of object that must be in tile # check whether we still want this
   max_files: 16382  # Maximum files per directory
+  min_viable_area: 20.0  # Minimum area for split objects in pixels²
+  min_fraction: 0.1  # Minimum fraction of original polygon for split objects
 
 balance:
   enabled: true

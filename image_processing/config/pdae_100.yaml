@@ -1,9 +1,9 @@
 # CGRAS Data Processing Pipeline Configuration
 
 # Project details
-project_name: "amag130"  # Name of the project
-input_path: "data/amag/cvat_outputs/amag130/amag130"  # Absolute path to the input data from CVAT
-output_base_path: "data/amag/segmentation_outputs"  # Base output directory
+project_name: "Pdae100"  # Name of the project
+input_path: "data/cgras/temp"  # Absolute path to the input data from CVAT
+output_base_path: "data/cgras/pdae/pdae_early_5_2"  # Base output directory
 
 # Pipeline steps to run (in order)
 pipeline:
@@ -19,8 +19,8 @@ folder_structure:
 
 filter:
   enabled: true
-  class_ids: [0, 1, 2, 3]  # Classes to filter
-  min_pixel_area: [175, 175, 200, 200] # Different thresholds for different classes
+  class_ids: [0, 1]  # Classes to filter
+  min_pixel_area: [200, 200] # Different thresholds for different classes
   copy_images: true  # Whether to copy image files or just labels
 
 split:
