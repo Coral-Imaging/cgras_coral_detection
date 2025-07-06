@@ -12,19 +12,19 @@ from ultralytics import YOLO
 # CONFIGURATION: MODIFY AS NEEDED
 # -----------------------------
 PROJECT_DIR = "cgras_segmentation"
-NAME = "val_amag130_c50"
-CONF_THRESH = 0.3
+NAME = "val_dataAmil_modelAlor_20250624"
+CONF_THRESH = 0.5
 IOU_THRESH = 0.5
 IGNORE_CLASSES = None
-weights_file = "/mnt/hpccs01/home/gonia/repos/cgras_coral_detection/segmenter/cgras_segmentation/train_amag1302/weights/best.pt"
-data_file = "/mnt/hpccs01/home/gonia/data/outputs/data_pipleline/amag130_filtered_split_tiled_balanced/cgras_data.yaml"
+weights_file = "/home/reggie/hpc-home/models/cgras/cgras_data_2024_Amag_trained_2020616_modelYolo8xseg_best.pt"
+data_file = "/home/reggie/hpc-home/Data/cgras/aspa/aspa_alor117_filtered_split_tiled_balanced/cgras_data.yaml"
 # data_file = "/home/java/hpc-home/data/test/cgras_data.yaml"
 
 # -----------------------------
 # MODEL INITIALIZATION & VALIDATION
 # -----------------------------
 model = YOLO(weights_file)
-metrics_d = model.val(conf=CONF_THRESH, iou=IOU_THRESH, project=PROJECT_DIR, name=NAME, data=data_file, plots=True)
+metrics_d = model.val(conf=CONF_THRESH, iou=IOU_THRESH, project=PROJECT_DIR, name=NAME, data=data_file, plots=True, split="test")
 
 # Get confusion matrix
 conf_mat_d = metrics_d.confusion_matrix.matrix  # Confusion matrix

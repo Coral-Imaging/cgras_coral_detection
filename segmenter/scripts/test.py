@@ -10,9 +10,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.tester import SegmentationTester
 
 # MODEL_PATH = "/home/java/repos/cgras_coral_detection/segmenter/cgras_segmentation/train7/weights/best.pt"
-MODEL_PATH = "/home/java/hpc-home/cgras_segmentation/train_coral_polyp/weights/best.pt"
-YAML_PATH = "/media/java/RRAP03/outputs/train/cgras_data.yaml"
-OUTPUT_PATH = "/media/java/RRAP03/outputs/test"
+MODEL_PATH = "/home/reggie/hpc-home/models/cgras_data_2025Pdae_trained_20250524_modelyolo8xseg.pt"
+YAML_PATH = "/home/reggie/hpc-home/Data/cgras/aspa/dataset_2023_built_from_testSet_122/cgras_2023+2024_dataset_seg_20250326.yaml"
+OUTPUT_PATH = "/home/reggie/hpc-home/outputs/pdae_test"
 CONF_THRESHOLD = 0.5
 
 def main(model, yaml, output, conf):

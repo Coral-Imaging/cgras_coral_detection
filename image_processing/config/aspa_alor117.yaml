@@ -1,9 +1,9 @@
 # CGRAS Data Processing Pipeline Configuration
 
 # Project details
-project_name: "amag130"  # Name of the project
-input_path: "Data/cgras/amag/exported_from_cvat"  # Absolute path to the input data from CVAT
-output_base_path: "Data/cgras/amag"  # Base output directory
+project_name: "aspa_alor117"  # Name of the project
+input_path: "Data/cgras/aspa/cvat_export"  # Absolute path to the input data from CVAT
+output_base_path: "Data/cgras/aspa/"  # Base output directory
 
 # Pipeline steps to run (in order)
 pipeline:
@@ -25,7 +25,7 @@ filter:
 
 split:
   enabled: true
-  split_field: "tile"  # Field to split by (e.g., tile, week)
+  split_field: null  # Field to split by (e.g., tile, week). Null (None) for split randomly based on the ratio
   train_ratio: 0.7
   val_ratio: 0.15
   test_ratio: 0.15

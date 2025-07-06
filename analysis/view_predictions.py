@@ -24,15 +24,10 @@ bounding_boxes = False #if bounding boxes are to be visualised
 batch_height, batch_width = 3000, 3000
 
 # files / data locations
-weights_file_path = "/mnt/hpccs01/home/wardlewo/20250205_cgras_segmentation_alive_dead/train7/weights/best.pt"
-save_dir = '/mnt/hpccs01/home/wardlewo/Data/Visualisation'
-img_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/images/'
-txt_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/labels/'
-weights_file_path = "/mnt/hpccs01/home/wardlewo/20250205_cgras_segmentation_alive_dead/train7/weights/best.pt"
-save_dir = '/mnt/hpccs01/home/wardlewo/Data/Visualisation'
-img_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/images/'
-txt_folder = '/mnt/hpccs01/home/wardlewo/Data/cgras/cgras_23_n_24_combined/20241219_improved_label_dataset_S+P+NegsReduced+Altered_Labels/test_0/labels/labels/'
-
+weights_file_path = "/home/reggie/hpc-home/models/cgras/cgras_data_2025Pdae_trained_20250524_modelyolo8xseg.pt"
+save_dir = '/home/reggie/hpc-home/outputs/pdae_test/test'
+img_folder = '/home/reggie/hpc-home/Data/cgras/2024_cgras_pdae/Pdae130_filtered_split_tiled_balanced/test_test_0/images'
+txt_folder = '/home/reggie/hpc-home/Data/cgras/2024_cgras_pdae/Pdae130_filtered_split_tiled_balanced/test_test_0/labels'
 # load model
 def load_model(weights_path):
     from ultralytics import YOLO
@@ -127,7 +122,7 @@ def save_image_predictions_mask(results, image, imgname, save_path, conf, class_
     font_size = 1.5#int(round(line_tickness/2))
     font_thickness = 2#3*(abs(line_tickness-font_size))+font_size
     if results and results[0].masks:
-        for j, m in enumerate(results.masks):
+        for j, m in enumerate(results[0].masks):
             xyn = np.array(m.xyn)
             xyn[0, :, 0] = (xyn[0, :, 0] * width)
             xyn[0, :, 1] = (xyn[0, :, 1] * height)

@@ -4,10 +4,10 @@
 project: "cgras_segmentation"
 name: "train_Pdae130"
 model_path: "yolov8n-seg.pt"
-yaml_path: "Data/cgras/pdae_100/Pdae130_filtered_split_tiled_balanced/cgras_data.yaml"
+yaml_path: "Data/cgras/2024_cgras_pdae/Pdae130_filtered_split_tiled_balanced/cgras_data.yaml"
 
 # Training parameters
-classes: [0, 1]  # Coral and Polyp
+classes: [0, 1]  # Coral: Alive and Dead
 pretrained: true
 epochs: 1000
 batch_size: 0.95
