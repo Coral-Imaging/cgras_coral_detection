@@ -39,8 +39,12 @@ class DatasetSplitter:
         
         # Regex pattern for CGRAS file naming convention
         # CGRAS_<Species>_<Room>_<date>_w<week_number>_T<tile_number>_<index_number>.jpg
-        self.file_pattern = re.compile(
+        self.cgras_pattern = re.compile(
             r'CGRAS_([^_]+)_([^_]+)_(\d{8})_w(\d+)_T(\d{2})_(\d{2})\.([^.]+)$'
+        )
+        # ASPA pattern: <number>-<field1>-<field2>-<field3>-<field4>-<date>-<time>.jpg
+        self.aspa_pattern = re.compile(
+            r'(\d+)-(\d+)-(\d+)-(\d+)-(\d+)-(\d{6})-(\d{4})\.([^.]+)$'
         )
         
         # Load YAML data
@@ -121,7 +125,7 @@ class DatasetSplitter:
     
     def parse_file_info(self):
         """
-        Parse all image filenames to extract metadata according to the CGRAS naming convention.
+        Parse all image filenames to extract metadata according to the CGRAS or ASPA naming convention.
         
         Returns:
             pandas.DataFrame: DataFrame containing parsed file information
@@ -132,10 +136,13 @@ class DatasetSplitter:
         print("Parsing file information...")
         for img_path in tqdm(self.image_paths, unit="files"):
             filename = img_path.name
-            match = self.file_pattern.search(filename)
             
-            if match:
-                species, room, date, week, tile, index, ext = match.groups()
+            # Try CGRAS pattern first
+            cgras_match = self.cgras_pattern.search(filename)
+            aspa_match = self.aspa_pattern.search(filename)
+            
+            if cgras_match:
+                species, room, date, week, tile, index, ext = cgras_match.groups()
                 
                 # Convert to appropriate types
                 week = int(week)
@@ -155,6 +162,40 @@ class DatasetSplitter:
                     'tile': tile,
                     'index': index,
                     'extension': ext,
+                    'image_path': img_path,
+                    'label_path': label_path if has_label else None,
+                    'has_label': has_label,
+                    'original_dataset': self._get_dataset_name(img_path)
+                })
+            elif aspa_match:
+                id_num, field1, field2, field3, field4, date, time, ext = aspa_match.groups()
+                
+                # Convert to appropriate types
+                id_num = int(id_num)
+                field1 = int(field1)
+                field2 = int(field2) 
+                field3 = int(field3)
+                field4 = int(field4)
+                
+                # Find label path
+                label_path = self._find_label_path(img_path)
+                has_label = label_path.exists()
+                
+                # For ASPA files, we'll use field1 as "room" and field3 as "tile" to maintain compatibility
+                file_info.append({
+                    'filename': filename,
+                    'species': 'aspa',  # Default species for ASPA files
+                    'room': f"room_{field1}",  # Use field1 as room identifier
+                    'date': date,
+                    'week': 1,  # Default week for ASPA files
+                    'tile': field3,  # Use field3 as tile
+                    'index': id_num,  # Use the ID number as index
+                    'extension': ext,
+                    'aspa_field1': field1,  # Store original ASPA fields
+                    'aspa_field2': field2,
+                    'aspa_field3': field3,
+                    'aspa_field4': field4,
+                    'aspa_time': time,
                     'image_path': img_path,
                     'label_path': label_path if has_label else None,
                     'has_label': has_label,

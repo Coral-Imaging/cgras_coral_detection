@@ -1,7 +1,9 @@
 #!/bin/bash -l
 
-#PBS -N test
-#PBS -l select=4:ncpus=4:ngpus=2:mem=8GB:gpu_id=A100 
-#PBS -l walltime=2:00:00
-#PBS -j oe
+#PBS -N dataset_analysis
+#PBS -l walltime=7:00:00
+#PBS -l ncpus=8
+#PBS -l mem=64gb
+#PBS -l ngpus=1
+#PBS -l gpu_id=A100
 #PBS -m abe

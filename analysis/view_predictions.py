@@ -124,6 +124,7 @@ def save_image_predictions_mask(results, image, imgname, save_path, conf, class_
     font_thickness = 2#3*(abs(line_tickness-font_size))+font_size
     if results and results[0].masks:
         for j, m in enumerate(results[0].masks):
+        for j, m in enumerate(results[0].masks):
             xyn = np.array(m.xyn)
             xyn[0, :, 0] = (xyn[0, :, 0] * width)
             xyn[0, :, 1] = (xyn[0, :, 1] * height)

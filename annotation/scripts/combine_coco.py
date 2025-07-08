@@ -9,9 +9,9 @@ from collections import defaultdict
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Combine two COCO datasets into one')
-    parser.add_argument('--base', required=False, default="/home/wardlewo/Reggie/data/fix/instances_default.json" , help='Path to base COCO JSON file')
-    parser.add_argument('--additional', required=False,default="//home/wardlewo/Reggie/data/job_2427841_annotations_2025_05_14_02_47_49_coco 1.0/annotations/instances_default.json" ,help='Path to additional COCO JSON file whose labels will override base dataset')
-    parser.add_argument('--output', required=False,default="/home/wardlewo/Reggie/data/instances_default.json" ,help='Path to output combined COCO JSON file')
+    parser.add_argument('--base', required=False, default="/home/reggie/hpc-home/Data/cgras/amil/amil_predict_100/fixed_amil_predict.json" , help='Path to base COCO JSON file')
+    parser.add_argument('--additional', required=False,default="/home/reggie/Downloads/instances_default.json" ,help='Path to additional COCO JSON file whose labels will override base dataset')
+    parser.add_argument('--output', required=False,default="/home/reggie/hpc-home/Data/cgras/amil/amil_predict_100.json" ,help='Path to output combined COCO JSON file')
     return parser.parse_args()
 
 def load_coco_data(json_path):

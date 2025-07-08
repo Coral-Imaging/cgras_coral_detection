@@ -1,9 +1,9 @@
 # CGRAS Data Processing Pipeline Configuration
 
 # Project details
-project_name: "amag30"  # Name of the project
-input_path: "/media/java/RRAP03/data/exported_from_cvat/amag30"  # Absolute path to the input data from CVAT
-output_base_path: "/media/java/RRAP03/data/outputs/data_pipleline"  # Base output directory
+project_name: "aspa_alor117"  # Name of the project
+input_path: "Data/cgras/aspa/cvat_export"  # Absolute path to the input data from CVAT
+output_base_path: "Data/cgras/aspa/"  # Base output directory
 
 # Pipeline steps to run (in order)
 pipeline:
@@ -19,8 +19,8 @@ folder_structure:
 
 filter:
   enabled: true
-  class_ids: [0, 1, 2, 3]  # Classes to filter
-  min_pixel_area: [175, 175, 200, 200] # Different thresholds for different classes
+  class_ids: [0, 1]  # Classes to filter
+  min_pixel_area: [200, 200] # Different thresholds for different classes
   copy_images: true  # Whether to copy image files or just labels
 
 split:

@@ -19,8 +19,8 @@ folder_structure:
 
 filter:
   enabled: true
-  class_ids: [0, 1, 2, 3]  # Classes to filter
-  min_pixel_area: [175, 175, 200, 200] # Different thresholds for different classes
+  class_ids: [0, 1]  # Classes to filter
+  min_pixel_area: [200, 200] # Different thresholds for different classes
   copy_images: true  # Whether to copy image files or just labels
 
 split:
