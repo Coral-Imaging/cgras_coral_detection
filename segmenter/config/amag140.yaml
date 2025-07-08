@@ -3,8 +3,8 @@
 # Project settings
 project: "cgras_segmentation"
 name: "train_amag140"
-model_path: "/home/alexanderjones/Alex/hpc-home/yolov8n-seg.pt"
-yaml_path: "/home/alexanderjones/Alex/hpc-home/data/amag/segmentation_outputs/amag140_filtered_split_tiled_balanced/cgras_data.yaml"
+model_path: "yolov8n-seg.pt"
+yaml_path: "data/amag/segmentation_outputs/amag140_filtered_split_tiled_balanced/cgras_data.yaml"
 
 # Training parameters
 classes: [0, 1]  # Coral and Polyp
