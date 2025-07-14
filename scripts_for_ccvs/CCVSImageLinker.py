@@ -54,6 +54,23 @@ class CCVSImageLinker:
             bool: True if successful, False otherwise
         """
         try:
+            # Extract tank_id, tile_id, and date from the YAML filename
+            yaml_filename = os.path.basename(yaml_path)
+            # Expected format: tile_sample_species_tankid_tileid_date.yaml
+            parts = yaml_filename.split('_')
+            if len(parts) >= 6:  # Ensure we have enough parts
+                # Parse tank_id, tile_id, and date
+                species = parts[2]
+                tank_id = parts[3]
+                tile_id = parts[4]
+                date = parts[5].split('.')[0]  # Remove file extension
+                
+                # Create folder name in format "{tank_id}_{tile_id}_{date}"
+                folder_name = f"{tank_id}_{tile_id}_{date}"
+            else:
+                print(f"WARNING: Could not parse tank_id from filename: {yaml_filename}")
+                folder_name = None
+            
             # Load the YAML file
             with open(yaml_path, 'r') as file:
                 config = yaml.safe_load(file)
@@ -68,6 +85,16 @@ class CCVSImageLinker:
             if dest_dir.startswith('/home/qcr/'):
                 dest_dir = dest_dir.replace('/home/qcr/', '/home/dtsai/')
                 print(f"Adjusted destination path: {dest_dir}")
+            
+            # If we have a folder_name, append it to the destination directory
+            if folder_name:
+                # Check if the path already ends with the folder name
+                if not dest_dir.endswith(folder_name):
+                    # Extract the base directory (remove the last component)
+                    base_dir = os.path.dirname(dest_dir)
+                    # Create the new destination directory with the folder name
+                    dest_dir = os.path.join(base_dir, folder_name)
+                    print(f"Using tank-specific folder: {dest_dir}")
             
             # Create destination directory if it doesn't exist
             os.makedirs(dest_dir, exist_ok=True)
@@ -103,7 +130,7 @@ class CCVSImageLinker:
                     # os.symlink(source_path, dest_path)
                     # print(f"Created symlink: {dest_path} -> {source_path}")
                     shutil.copy(source_path, dest_path)
-                    print(f"Copied file: {dest_path} -> {source_path}")
+                    print(f"Copied file: {source_path} -> {dest_path}")
                     success_count += 1
                 else:
                     print(f"WARNING: Could not find source file for: {image_filename}")
@@ -180,8 +207,9 @@ class CCVSImageLinker:
 
 
 def main():
-    yaml_dir = '/home/dtsai/Code/cgras/cgras_settler_counter/scripts_for_ccvs'
-    target_dir = '/home/dtsai/Data/cgras_datasets/cgras_2024_aims_camera_trolley_fixed_filenames/cgras_2024_aims_camera_trolley/corals_spawned_2024_oct/*/*'
+    yaml_dir = '/home/dtsai/Code/cgras/cgras_settler_counter/scripts_for_ccvs/highdensityexperiment_ccvs_config_files/Aken_20250128_c'
+    # target_dir = '/home/dtsai/Data/cgras_datasets/cgras_2024_aims_camera_trolley_fixed_filenames/cgras_2024_aims_camera_trolley/corals_spawned_2024_oct/*/*'
+    target_dir = '/home/dtsai/Data/cgras_datasets/cgras_amag_2024_highdensityexperiment/Aken_20250128_c'
     
     # Create and run the image linker
     linker = CCVSImageLinker(yaml_dir, target_dir)
@@ -190,4 +218,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
